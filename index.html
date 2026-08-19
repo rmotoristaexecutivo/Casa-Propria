@@ -330,6 +330,63 @@ tr.det:hover > td{background:var(--carta2)}
 .obs-cel{max-width:260px; font-size:13.5px; color:var(--tinta2)}
 @media (max-width:640px){ .obs-cel{max-width:180px} }
 
+
+/* ---------- resumo: indicadores, gráficos e sanfonas ---------- */
+.stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px}
+.stat{background:var(--carta2); border:1px solid var(--linha); border-radius:13px; padding:12px 13px}
+.stat .r{font-size:10px; text-transform:uppercase; letter-spacing:.09em; color:var(--tinta3); font-weight:700}
+.stat .v{font:700 17px "JetBrains Mono",monospace; margin-top:5px; letter-spacing:-.03em}
+.stat .m{font-size:11.5px; color:var(--tinta3); margin-top:2px}
+
+.donut-linha{display:flex; align-items:center; gap:22px; flex-wrap:wrap}
+.donut{width:172px; height:172px; flex:none}
+.donut text.centro{font-family:"JetBrains Mono",monospace; font-weight:700; fill:var(--tinta)}
+.donut text.rot{font-family:"Inter",sans-serif; font-size:6.4px; fill:var(--tinta3); font-weight:600;
+  text-transform:uppercase; letter-spacing:.12em}
+.legenda{display:flex; flex-direction:column; gap:9px; flex:1; min-width:190px}
+.legenda .li{display:flex; align-items:center; gap:10px; font-size:13.5px}
+.legenda .li i{width:11px; height:11px; border-radius:4px; flex:none}
+.legenda .li b{margin-left:auto; font-family:"JetBrains Mono",monospace; font-size:13.5px}
+.legenda .li span.pc{color:var(--tinta3); font-family:"JetBrains Mono",monospace; font-size:12px; width:46px; text-align:right}
+
+.barras{display:flex; flex-direction:column; gap:14px}
+.lb-topo{display:flex; align-items:baseline; gap:9px; font-size:13.5px; font-weight:600}
+.lb-topo .rot{display:flex; align-items:center; gap:8px; min-width:0}
+.lb-topo .rot i{width:10px; height:10px; border-radius:3px; flex:none}
+.lb-topo .val{margin-left:auto; font-family:"JetBrains Mono",monospace; font-weight:700}
+.lb-trilho{height:11px; border-radius:7px; background:var(--linha2); margin-top:6px; position:relative; overflow:visible}
+html[data-tema="escuro"] .lb-trilho{background:#0E1524}
+.lb-trilho > span{display:block; height:100%; border-radius:7px}
+.lb-trilho > i.marca{position:absolute; top:-4px; width:2px; height:19px; background:var(--tinta2); border-radius:2px}
+.lb-meta{font-size:11.5px; color:var(--tinta3); margin-top:5px}
+.lb-meta b{color:var(--alerta)}
+
+.fluxo{display:flex; gap:9px; align-items:flex-end; overflow-x:auto; padding:6px 2px 0; min-height:150px}
+.fmes{flex:none; width:44px; text-align:center}
+.fbar{height:118px; display:flex; flex-direction:column; justify-content:flex-end; gap:2px}
+.fbar span{display:block; border-radius:4px 4px 0 0; min-height:2px}
+.fbar .pg{background:var(--ok)}
+.fbar .ab{background:var(--latao); border-radius:4px 4px 0 0}
+.fmes .rot{font-size:10.5px; color:var(--tinta3); margin-top:7px; font-weight:600}
+.fmes .tot{font:600 10px "JetBrains Mono",monospace; color:var(--tinta2); margin-top:2px}
+.fmes.destacado .rot{color:var(--acento)}
+
+.sanfona{background:var(--carta); border:1px solid var(--linha); border-radius:var(--raio);
+  box-shadow:var(--sombra); margin-bottom:12px; overflow:hidden}
+.sanfona > summary{
+  padding:14px 17px; cursor:pointer; display:flex; align-items:center; gap:10px;
+  font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:15.5px; list-style:none;
+}
+.sanfona > summary::-webkit-details-marker{display:none}
+.sanfona > summary::after{content:"▾"; margin-left:auto; color:var(--tinta3); font-size:13px; transition:.15s}
+.sanfona[open] > summary::after{transform:rotate(180deg)}
+.sanfona > summary:hover{color:var(--acento)}
+.sanfona > summary .cont{font:600 12px "JetBrains Mono",monospace; color:var(--tinta3); margin-left:8px}
+.sanfona[open] > summary{border-bottom:1px solid var(--linha)}
+.sanfona .conteudo{padding:16px}
+.sanfona .conteudo.zero{padding:0}
+@media (max-width:880px){ .stats{grid-template-columns:repeat(2,1fr)} }
+
 @media (max-width:880px){
   .grade{grid-template-columns:repeat(2,1fr)}
   .campo.l3,.campo.l4{grid-column:span 2}
@@ -488,13 +545,19 @@ tr.det:hover > td{background:var(--carta2)}
 
   <!-- ================= RESUMO ================= -->
   <section id="pg-res" hidden>
-    <div class="cartao"><div class="cab"><h2>Quadro geral</h2></div><div class="corpo" id="resGeral"></div></div>
-    <div class="cartao"><div class="cab"><h2>Reforma por cômodo</h2><span class="dica">planejado × gasto</span></div>
-      <div class="corpo" style="padding:0"><div class="tab-rolo"><table id="tbResComodo"></table></div></div></div>
-    <div class="cartao"><div class="cab"><h2>Reforma por categoria</h2></div>
-      <div class="corpo" style="padding:0"><div class="tab-rolo"><table id="tbResCat"></table></div></div></div>
-    <div class="cartao"><div class="cab"><h2>A pagar</h2><span class="dica">tudo que ainda não está marcado como pago, por data</span></div>
-      <div class="corpo" style="padding:0"><div class="tab-rolo"><table id="tbResPagar"></table></div></div></div>
+    <div class="cartao">
+      <div class="cab">
+        <h2>Onde está o dinheiro</h2>
+        <select id="filtroRes" onchange="renderResumo()" style="width:auto; min-width:170px">
+          <option value="tudo">Projeto inteiro</option>
+          <option value="compra">Só a compra</option>
+          <option value="reforma">Só a reforma</option>
+        </select>
+      </div>
+      <div class="corpo" id="resTopo"></div>
+    </div>
+    <div id="resGraficos"></div>
+    <div id="resListas"></div>
   </section>
 
   <p class="rodape">Os dados ficam guardados neste navegador. Use <strong>Baixar backup</strong> de vez em quando — é o que permite abrir tudo em outro aparelho.</p>
@@ -1100,78 +1163,311 @@ function renderItens(){
 /* =========================================================
    Render — resumo
    ========================================================= */
-function renderResumo(){
-  const imovel = n(D.valorImovel), ent = somaEntradas(), custos = somaCustos(), ref = somaReforma();
-  const pago = somaEntradasPagas() + somaCustosPagos() + somaReformaPaga();
-  const total = totalProjeto();
-  const linhas = [
-    ['Valor do imóvel', imovel, ''],
-    ['Entrada lançada', ent, moeda(somaEntradasPagas())+' pago'],
-    ['Valor financiado', n(D.fin.valorFin), (D.fin.banco||'') + (D.fin.prazo ? ' · '+numFmt(D.fin.prazo,0)+' meses' : '')],
-    ['Custos de aquisição', custos, moeda(somaCustosPagos())+' pago'],
-    ['Reforma', ref, moeda(somaReformaPaga())+' pago']
-  ];
-  let h = '<div class="tab-rolo"><table><tbody>' + linhas.map(l =>
-    '<tr><td><strong>'+l[0]+'</strong></td><td style="color:var(--tinta3);font-size:13px">'+l[2]+'</td>' +
-    '<td class="num"><strong>'+moeda(l[1])+'</strong></td></tr>').join('') +
-    '<tr><td><strong>Custo total do projeto</strong></td><td style="color:var(--tinta3);font-size:13px">imóvel + custos + reforma</td>' +
-    '<td class="num"><strong style="color:var(--latao)">'+moeda(total)+'</strong></td></tr>' +
-    '<tr><td><strong>Já desembolsado</strong></td><td style="color:var(--tinta3);font-size:13px">' +
-    (total ? numFmt(pago/total*100,1)+'% do projeto' : '') + '</td>' +
-    '<td class="num"><strong style="color:var(--ok)">'+moeda(pago)+'</strong></td></tr>' +
-    '</tbody></table></div>';
-  const parc = n(D.fin.parcela);
-  if(parc) h += '<div class="aviso ok">Parcela do financiamento: <strong>'+moeda(parc)+'</strong> por mês' +
-    (D.fin.dataPrim ? ', a partir de '+dataBR(D.fin.dataPrim) : '') + '.</div>';
-  $('#resGeral').innerHTML = h;
-
-  // por cômodo
-  const tc = $('#tbResComodo');
-  const comLinhas = D.comodos.map(c => {
-    const g = gastoComodo(c.id), o = n(c.orcado), dif = o - g;
-    if(!g && !o) return '';
-    return '<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px;background:'+corComodo(c.id)+'"></span><strong>'+esc(c.nome)+'</strong></td>' +
-      '<td class="num">'+(o?moeda(o):'—')+'</td>' +
-      '<td class="num">'+moeda(g)+'</td>' +
-      '<td class="num" style="color:'+(o? (dif<0?'var(--alerta)':'var(--ok)') :'var(--tinta3)')+'">'+(o?moeda(dif):'—')+'</td>' +
-      '<td class="num">'+itensDoComodo(c.id).length+'</td></tr>';
-  }).join('');
-  tc.innerHTML = comLinhas
-    ? '<thead><tr><th>Cômodo</th><th class="num">Planejado</th><th class="num">Gasto</th><th class="num">Diferença</th><th class="num">Itens</th></tr></thead><tbody>'+comLinhas+'</tbody>' +
-      '<tfoot><tr><td><strong>Total</strong></td><td class="num">'+moeda(D.comodos.reduce((s,c)=>s+n(c.orcado),0))+'</td>' +
-      '<td class="num"><strong>'+moeda(ref)+'</strong></td><td colspan="2"></td></tr></tfoot>'
-    : '<tr><td class="vazio">Sem itens de reforma lançados.</td></tr>';
-
-  // por categoria
-  const mapa = {};
-  itensAtivos().forEach(i => { const k = i.categoria||'Outros'; mapa[k] = (mapa[k]||0) + totalItem(i); });
-  const cats = Object.keys(mapa).sort((a,b)=>mapa[b]-mapa[a]);
-  $('#tbResCat').innerHTML = cats.length
-    ? '<thead><tr><th>Categoria</th><th class="num">Valor</th><th class="num">% da reforma</th></tr></thead><tbody>' +
-      cats.map(k => '<tr><td>'+esc(k)+'</td><td class="num">'+moeda(mapa[k])+'</td>' +
-      '<td class="num">'+(ref?numFmt(mapa[k]/ref*100,1):'0,0')+'%</td></tr>').join('') + '</tbody>'
-    : '<tr><td class="vazio">Sem itens de reforma lançados.</td></tr>';
-
-  // a pagar
-  const pend = [];
-  /* Cada parcela em aberto entra como uma linha própria, na data do vencimento. */
-  D.entradas.forEach(e => {
-    const q = qtdParcelas(e);
-    garantirParcelas(e).forEach((p,i) => {
-      if(p.pago) return;
-      pend.push({d:p.venc, o:'Entrada', q:(e.desc||e.tipo||'Entrada') + (q>1 ? ' — parcela '+(i+1)+'/'+q : ''), v:valorParcela(e,i)});
-    });
+/* --- agregações usadas nos gráficos ------------------------------------- */
+function porComodo(){
+  return D.comodos.map(c => ({
+    id:c.id, nome:c.nome, cor:corComodo(c.id),
+    gasto:gastoComodo(c.id), orcado:n(c.orcado), itens:itensDoComodo(c.id).length
+  })).filter(x => x.gasto || x.orcado);
+}
+function porCategoria(){
+  const m = {};
+  itensAtivos().forEach(i => { const k = i.categoria || 'Outros'; m[k] = (m[k]||0) + totalItem(i); });
+  return Object.keys(m).map(k => ({nome:k, valor:m[k]})).sort((a,b)=>b.valor-a.valor);
+}
+function porFornecedor(){
+  const m = {};
+  itensAtivos().forEach(i => {
+    const k = (i.empresa||'').trim() || 'Sem fornecedor informado';
+    if(!m[k]) m[k] = {valor:0, itens:0, pago:0};
+    m[k].valor += totalItem(i); m[k].itens++;
+    if(i.pago) m[k].pago += totalItem(i);
   });
-  D.custos.filter(c=>!c.pago && n(c.valor)>0).forEach(c => pend.push({d:c.data, o:'Aquisição', q:c.desc, v:n(c.valor)}));
-  itensAtivos().filter(i=>!i.pago).forEach(i => pend.push({d:i.data, o:'Reforma · '+comodoNome(i.comodoId), q:i.desc, v:totalItem(i)}));
+  return Object.keys(m).map(k => Object.assign({nome:k}, m[k])).sort((a,b)=>b.valor-a.valor);
+}
+function porForma(){
+  const m = {};
+  const add = (f,v) => { const k = (f||'').trim() || 'Não informada'; m[k] = (m[k]||0) + v; };
+  D.entradas.forEach(e => add(e.forma, n(e.valor)));
+  D.custos.forEach(c => add(c.forma, n(c.valor)));
+  itensAtivos().forEach(i => add(i.forma, totalItem(i)));
+  return Object.keys(m).map(k => ({nome:k, valor:m[k]})).sort((a,b)=>b.valor-a.valor);
+}
+/* Fluxo mês a mês: parcelas da entrada pelo vencimento, custos e itens pela data. */
+function fluxoMensal(escopo){
+  const m = {};
+  const põe = (data, valor, pago) => {
+    if(!data || !valor) return;
+    const k = String(data).slice(0,7);
+    if(!m[k]) m[k] = {pago:0, aberto:0};
+    m[k][pago ? 'pago' : 'aberto'] += valor;
+  };
+  if(escopo !== 'reforma'){
+    D.entradas.forEach(e => garantirParcelas(e).forEach((p,idx) => põe(p.pago ? (p.dataPago||p.venc) : p.venc, valorParcela(e,idx), p.pago)));
+    D.custos.forEach(c => põe(c.data, n(c.valor), c.pago));
+  }
+  if(escopo !== 'compra'){
+    itensAtivos().forEach(i => põe(i.data, totalItem(i), i.pago));
+  }
+  return Object.keys(m).sort().map(k => Object.assign({mes:k}, m[k]));
+}
+function mesBR(k){
+  const nomes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const p = String(k).split('-');
+  return nomes[(+p[1])-1] + '/' + p[0].slice(2);
+}
+
+/* --- desenho ------------------------------------------------------------ */
+/* Valor curto para caber no centro do donut: 382.651,26 vira "R$ 383 mil". */
+function moedaCurta(v){
+  v = n(v);
+  if(Math.abs(v) >= 1000000) return 'R$ ' + numFmt(v/1000000, 2) + ' mi';
+  if(Math.abs(v) >= 1000) return 'R$ ' + numFmt(v/1000, 0) + ' mil';
+  return moeda(v);
+}
+function svgDonut(partes, centro, rotulo){
+  const total = partes.reduce((s,p)=>s+p.valor,0);
+  if(!total) return '';
+  const R = 40, C = 2 * Math.PI * R;
+  let acum = 0;
+  const arcos = partes.filter(p=>p.valor>0).map(p => {
+    const frac = p.valor / total, dash = C * frac;
+    const el = '<circle cx="50" cy="50" r="'+R+'" fill="none" stroke="'+p.cor+'" stroke-width="15"' +
+      ' stroke-dasharray="'+dash.toFixed(2)+' '+(C-dash).toFixed(2)+'"' +
+      ' stroke-dashoffset="'+(-C*acum).toFixed(2)+'" transform="rotate(-90 50 50)"/>';
+    acum += frac;
+    return el;
+  }).join('');
+  return '<svg class="donut" viewBox="0 0 100 100" role="img" aria-label="'+esc(rotulo)+'">' +
+    '<circle cx="50" cy="50" r="'+R+'" fill="none" stroke="var(--linha2)" stroke-width="15"/>' + arcos +
+    '<text class="rot" x="50" y="44" text-anchor="middle">'+esc(rotulo)+'</text>' +
+    '<text class="centro" x="50" y="57" text-anchor="middle" font-size="9.5">'+esc(centro)+'</text></svg>';
+}
+function legenda(partes, total){
+  return '<div class="legenda">' + partes.filter(p=>p.valor>0).map(p =>
+    '<div class="li"><i style="background:'+p.cor+'"></i>'+esc(p.nome)+
+    '<b>'+moeda(p.valor)+'</b><span class="pc">'+(total?numFmt(p.valor/total*100,1):'0,0')+'%</span></div>').join('') + '</div>';
+}
+function barrasComodo(lista){
+  const teto = Math.max.apply(null, lista.map(c => Math.max(c.gasto, c.orcado)).concat([1]));
+  return '<div class="barras">' + lista.map(c => {
+    const estourou = c.orcado && c.gasto > c.orcado;
+    const larg = Math.min(100, (c.gasto/teto)*100);
+    const marca = c.orcado ? '<i class="marca" style="left:'+Math.min(100,(c.orcado/teto)*100)+'%"></i>' : '';
+    let meta;
+    if(!c.orcado) meta = c.itens + ' item(ns) · sem orçamento definido';
+    else if(estourou) meta = 'planejado ' + moeda(c.orcado) + ' · <b>estourou ' + moeda(c.gasto-c.orcado) + '</b>';
+    else meta = 'planejado ' + moeda(c.orcado) + ' · sobram ' + moeda(c.orcado-c.gasto) +
+      ' (' + numFmt(c.gasto/c.orcado*100,0) + '% usado)';
+    return '<div><div class="lb-topo"><span class="rot"><i style="background:'+c.cor+'"></i>'+esc(c.nome)+'</span>' +
+      '<span class="val">'+moeda(c.gasto)+'</span></div>' +
+      '<div class="lb-trilho"><span style="width:'+larg+'%; background:'+(estourou?'var(--alerta)':c.cor)+'"></span>'+marca+'</div>' +
+      '<div class="lb-meta">'+meta+'</div></div>';
+  }).join('') + '</div>';
+}
+function barrasSimples(lista, cores){
+  const teto = Math.max.apply(null, lista.map(x=>x.valor).concat([1]));
+  const total = lista.reduce((s,x)=>s+x.valor,0);
+  return '<div class="barras">' + lista.map((x,k) => {
+    const cor = cores ? cores[k % cores.length] : 'var(--c1)';
+    return '<div><div class="lb-topo"><span class="rot"><i style="background:'+cor+'"></i>'+esc(x.nome)+'</span>' +
+      '<span class="val">'+moeda(x.valor)+'</span></div>' +
+      '<div class="lb-trilho"><span style="width:'+((x.valor/teto)*100)+'%; background:'+cor+'"></span></div>' +
+      '<div class="lb-meta">'+(total?numFmt(x.valor/total*100,1):'0,0')+'% do total</div></div>';
+  }).join('') + '</div>';
+}
+function graficoFluxo(dados){
+  if(!dados.length) return '<p class="vazio">Sem datas lançadas ainda. Informe vencimentos nas entradas e datas nos custos e itens para ver o calendário.</p>';
+  const teto = Math.max.apply(null, dados.map(d => d.pago + d.aberto).concat([1]));
+  const hoje = hojeISO().slice(0,7);
+  const cols = dados.map(d => {
+    const t = d.pago + d.aberto;
+    return '<div class="fmes'+(d.mes===hoje?' destacado':'')+'"><div class="fbar">' +
+      (d.aberto ? '<span class="ab" style="height:'+((d.aberto/teto)*100)+'%" title="a pagar"></span>' : '') +
+      (d.pago ? '<span class="pg" style="height:'+((d.pago/teto)*100)+'%" title="pago"></span>' : '') +
+      '</div><div class="rot">'+mesBR(d.mes)+'</div><div class="tot">'+(t>=1000?numFmt(t/1000,1)+'k':numFmt(t,0))+'</div></div>';
+  }).join('');
+  return '<div class="fluxo">'+cols+'</div>' +
+    '<div class="leg" style="margin-top:12px"><span><i style="background:var(--ok)"></i>pago</span>' +
+    '<span><i style="background:var(--latao)"></i>a pagar</span>' +
+    '<span style="color:var(--tinta3)">valores em milhares abaixo de cada mês</span></div>';
+}
+function sanfona(titulo, contagem, conteudo, aberta, semPadding){
+  return '<details class="sanfona"'+(aberta?' open':'')+'><summary>'+esc(titulo) +
+    (contagem ? '<span class="cont">'+esc(contagem)+'</span>' : '') + '</summary>' +
+    '<div class="conteudo'+(semPadding?' zero':'')+'">'+conteudo+'</div></details>';
+}
+
+/* --- a guia ------------------------------------------------------------- */
+function renderResumo(){
+  const escopo = (document.getElementById('filtroRes')||{}).value || 'tudo';
+  const imovel = n(D.valorImovel), ent = somaEntradas(), fin = n(D.fin.valorFin);
+  const custos = somaCustos(), ref = somaReforma();
+  const pagoCompra = somaEntradasPagas() + somaCustosPagos(), pagoRef = somaReformaPaga();
+
+  const totalEscopo = escopo === 'compra' ? imovel + custos : escopo === 'reforma' ? ref : imovel + custos + ref;
+  const pagoEscopo  = escopo === 'compra' ? pagoCompra : escopo === 'reforma' ? pagoRef : pagoCompra + pagoRef;
+
+  /* ---- indicadores + composição ---- */
+  let stats = '';
+  const st = (r,v,m,cor) => '<div class="stat"><div class="r">'+r+'</div>' +
+    '<div class="v"'+(cor?' style="color:'+cor+'"':'')+'>'+v+'</div><div class="m">'+m+'</div></div>';
+  if(escopo !== 'reforma'){
+    stats += st('Valor do imóvel', moeda(imovel),
+      n(D.imovel.areaPriv) && imovel ? moeda(imovel/n(D.imovel.areaPriv))+' / m²' : 'sem área informada', 'var(--c1)');
+    stats += st('Entrada', moeda(ent),
+      moeda(somaEntradasPagas())+' já paga', 'var(--c2)');
+    stats += st('Financiado', moeda(fin),
+      (D.fin.parcela ? moeda(D.fin.parcela)+'/mês' : 'parcela não informada') +
+      (D.fin.prazo ? ' · '+numFmt(D.fin.prazo,0)+'x' : ''), 'var(--c6)');
+    stats += st('Custos de aquisição', moeda(custos),
+      D.custos.filter(c=>!c.pago && n(c.valor)>0).length + ' em aberto', 'var(--c5)');
+  }
+  if(escopo !== 'compra'){
+    stats += st('Reforma', moeda(ref), itensAtivos().length + ' itens lançados', 'var(--c3)');
+    stats += st('Reforma paga', moeda(pagoRef),
+      ref ? numFmt(pagoRef/ref*100,0)+'% dos itens' : 'nada lançado', 'var(--ok)');
+    const planejado = D.comodos.reduce((s,c)=>s+n(c.orcado),0);
+    stats += st('Orçamento planejado', moeda(planejado),
+      planejado ? (ref>planejado ? 'estourou '+moeda(ref-planejado) : 'sobram '+moeda(planejado-ref)) : 'defina por cômodo',
+      planejado && ref > planejado ? 'var(--alerta)' : '');
+    stats += st('Ambientes com gasto', String(porComodo().filter(c=>c.gasto>0).length),
+      'de ' + D.comodos.length + ' cadastrados', 'var(--c4)');
+  }
+  const pctPago = totalEscopo ? pagoEscopo/totalEscopo*100 : 0;
+  let topo = '<div class="stats">'+stats+'</div>';
+  topo += '<div class="lb-topo" style="font-size:14px"><span class="rot">Já desembolsado</span>' +
+    '<span class="val">'+moeda(pagoEscopo)+' de '+moeda(totalEscopo)+'</span></div>' +
+    '<div class="lb-trilho" style="height:14px"><span style="width:'+Math.min(100,pctPago)+'%; background:var(--ok)"></span></div>' +
+    '<div class="lb-meta">'+numFmt(pctPago,1)+'% do '+
+      (escopo==='compra'?'custo da compra':escopo==='reforma'?'valor da reforma':'projeto inteiro')+' já saiu do bolso</div>';
+  $('#resTopo').innerHTML = topo;
+
+  /* ---- gráficos ---- */
+  const partesTotal = [];
+  if(escopo !== 'reforma'){
+    partesTotal.push({nome:'Imóvel', valor:imovel, cor:'var(--c1)'});
+    partesTotal.push({nome:'Custos de aquisição', valor:custos, cor:'var(--c5)'});
+  }
+  if(escopo !== 'compra') partesTotal.push({nome:'Reforma', valor:ref, cor:'var(--c3)'});
+
+  let g = '';
+  if(totalEscopo){
+    g += '<div class="cartao"><div class="cab"><h2>Composição do custo</h2>' +
+      '<span class="dica">total de '+moeda(totalEscopo)+'</span></div><div class="corpo">' +
+      '<div class="donut-linha">' + svgDonut(partesTotal, moedaCurta(totalEscopo), 'total') +
+      legenda(partesTotal, totalEscopo) + '</div></div></div>';
+  }
+
+  const comodos = porComodo();
+  if(escopo !== 'compra' && comodos.length){
+    g += '<div class="cartao"><div class="cab"><h2>Gasto por ambiente</h2>' +
+      '<span class="dica">a marca preta é o orçamento planejado</span></div>' +
+      '<div class="corpo">'+barrasComodo(comodos.slice().sort((a,b)=>b.gasto-a.gasto))+'</div></div>';
+  }
+  const cats = porCategoria();
+  if(escopo !== 'compra' && cats.length){
+    g += '<div class="cartao"><div class="cab"><h2>Reforma por categoria</h2></div>' +
+      '<div class="corpo">'+barrasSimples(cats, ['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'])+'</div></div>';
+  }
+  g += '<div class="cartao"><div class="cab"><h2>Calendário de desembolso</h2>' +
+    '<span class="dica">o que já saiu e o que vence, mês a mês</span></div>' +
+    '<div class="corpo">'+graficoFluxo(fluxoMensal(escopo))+'</div></div>';
+  $('#resGraficos').innerHTML = g;
+
+  /* ---- listas suspensas ---- */
+  let L = '';
+
+  /* a pagar, item a item */
+  const pend = [];
+  if(escopo !== 'reforma'){
+    D.entradas.forEach(e => {
+      const q = qtdParcelas(e);
+      garantirParcelas(e).forEach((p,i) => {
+        if(p.pago) return;
+        pend.push({d:p.venc, o:'Entrada', q:(e.desc||e.tipo||'Entrada')+(q>1?' — parcela '+(i+1)+'/'+q:''), v:valorParcela(e,i)});
+      });
+    });
+    D.custos.filter(c=>!c.pago && n(c.valor)>0).forEach(c => pend.push({d:c.data, o:'Aquisição', q:c.desc, v:n(c.valor)}));
+  }
+  if(escopo !== 'compra'){
+    itensAtivos().filter(i=>!i.pago).forEach(i => pend.push({d:i.data, o:'Reforma · '+comodoNome(i.comodoId), q:i.desc, v:totalItem(i)}));
+  }
   pend.sort((a,b)=>String(a.d||'9999').localeCompare(String(b.d||'9999')));
-  $('#tbResPagar').innerHTML = pend.length
-    ? '<thead><tr><th>Data</th><th>Origem</th><th>Item</th><th class="num">Valor</th></tr></thead><tbody>' +
-      pend.map(p => '<tr><td>'+dataBR(p.d)+'</td><td style="color:var(--tinta3)">'+esc(p.o)+'</td>' +
-      '<td>'+esc(p.q)+'</td><td class="num">'+moeda(p.v)+'</td></tr>').join('') + '</tbody>' +
-      '<tfoot><tr><td colspan="3"><strong>Total em aberto</strong></td>' +
-      '<td class="num"><strong>'+moeda(pend.reduce((s,p)=>s+p.v,0))+'</strong></td></tr></tfoot>'
-    : '<tr><td class="vazio">Nada em aberto. Tudo que está lançado já foi marcado como pago.</td></tr>';
+  const hoje = hojeISO();
+  const tabPend = pend.length
+    ? '<div class="tab-rolo"><table><thead><tr><th>Vencimento</th><th>Origem</th><th>Item</th><th class="num">Valor</th></tr></thead><tbody>' +
+      pend.map(p => '<tr><td'+(p.d && p.d < hoje ? ' style="color:var(--alerta);font-weight:600"' : '')+'>'+dataBR(p.d)+
+        (p.d && p.d < hoje ? ' ⚠' : '')+'</td>' +
+        '<td style="color:var(--tinta3)">'+esc(p.o)+'</td><td>'+esc(p.q)+'</td>' +
+        '<td class="num">'+moeda(p.v)+'</td></tr>').join('') + '</tbody>' +
+      '<tfoot><tr><td colspan="3"><strong>Total em aberto</strong></td><td class="num"><strong>' +
+      moeda(pend.reduce((s,p)=>s+p.v,0))+'</strong></td></tr></tfoot></table></div>'
+    : '<p class="vazio">Nada em aberto. Tudo que está lançado já foi marcado como pago.</p>';
+  L += sanfona('A pagar', pend.length ? pend.length + ' lançamentos' : '', tabPend, true, true);
+
+  /* detalhe por ambiente */
+  if(escopo !== 'compra'){
+    const linhas = comodos.map(c => {
+      const dif = c.orcado - c.gasto;
+      return '<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px;background:'+c.cor+'"></span><strong>'+esc(c.nome)+'</strong></td>' +
+        '<td class="num">'+(c.orcado?moeda(c.orcado):'—')+'</td><td class="num">'+moeda(c.gasto)+'</td>' +
+        '<td class="num" style="color:'+(c.orcado?(dif<0?'var(--alerta)':'var(--ok)'):'var(--tinta3)')+'">'+(c.orcado?moeda(dif):'—')+'</td>' +
+        '<td class="num">'+c.itens+'</td></tr>';
+    }).join('');
+    L += sanfona('Ambiente por ambiente', comodos.length ? comodos.length + ' ambientes' : '',
+      comodos.length
+        ? '<div class="tab-rolo"><table><thead><tr><th>Cômodo</th><th class="num">Planejado</th><th class="num">Gasto</th><th class="num">Diferença</th><th class="num">Itens</th></tr></thead><tbody>'+linhas+'</tbody>' +
+          '<tfoot><tr><td><strong>Total</strong></td><td class="num">'+moeda(D.comodos.reduce((s,c)=>s+n(c.orcado),0))+'</td>' +
+          '<td class="num"><strong>'+moeda(ref)+'</strong></td><td colspan="2"></td></tr></tfoot></table></div>'
+        : '<p class="vazio">Sem itens de reforma lançados.</p>', false, true);
+
+    const forn = porFornecedor();
+    L += sanfona('Por fornecedor', forn.length ? forn.length + ' empresas' : '',
+      forn.length
+        ? '<div class="tab-rolo"><table><thead><tr><th>Fornecedor</th><th class="num">Itens</th><th class="num">Pago</th><th class="num">Total</th></tr></thead><tbody>' +
+          forn.map(f => '<tr><td><strong>'+esc(f.nome)+'</strong></td><td class="num">'+f.itens+'</td>' +
+          '<td class="num" style="color:var(--ok)">'+moeda(f.pago)+'</td><td class="num"><strong>'+moeda(f.valor)+'</strong></td></tr>').join('') +
+          '</tbody></table></div>'
+        : '<p class="vazio">Nenhum fornecedor informado nos itens.</p>', false, true);
+  }
+
+  /* formas de pagamento */
+  const formas = porForma();
+  L += sanfona('Formas de pagamento', formas.length ? formas.length + ' formas' : '',
+    formas.length
+      ? '<div class="tab-rolo"><table><thead><tr><th>Forma</th><th class="num">Valor</th><th class="num">Participação</th></tr></thead><tbody>' +
+        formas.map(f => { const t = formas.reduce((s,x)=>s+x.valor,0);
+          return '<tr><td>'+esc(f.nome)+'</td><td class="num">'+moeda(f.valor)+'</td>' +
+          '<td class="num">'+(t?numFmt(f.valor/t*100,1):'0,0')+'%</td></tr>'; }).join('') +
+        '</tbody></table></div>'
+      : '<p class="vazio">Nada lançado ainda.</p>', false, true);
+
+  /* já pago */
+  const feitos = [];
+  if(escopo !== 'reforma'){
+    D.entradas.forEach(e => {
+      const q = qtdParcelas(e);
+      garantirParcelas(e).forEach((p,i) => {
+        if(!p.pago) return;
+        feitos.push({d:p.dataPago||p.venc, o:'Entrada', q:(e.desc||e.tipo||'Entrada')+(q>1?' — parcela '+(i+1)+'/'+q:''), v:valorParcela(e,i)});
+      });
+    });
+    D.custos.filter(c=>c.pago).forEach(c => feitos.push({d:c.data, o:'Aquisição', q:c.desc, v:n(c.valor)}));
+  }
+  if(escopo !== 'compra'){
+    itensAtivos().filter(i=>i.pago).forEach(i => feitos.push({d:i.data, o:'Reforma · '+comodoNome(i.comodoId), q:i.desc, v:totalItem(i)}));
+  }
+  feitos.sort((a,b)=>String(b.d||'').localeCompare(String(a.d||'')));
+  L += sanfona('Já pago', feitos.length ? feitos.length + ' lançamentos' : '',
+    feitos.length
+      ? '<div class="tab-rolo"><table><thead><tr><th>Data</th><th>Origem</th><th>Item</th><th class="num">Valor</th></tr></thead><tbody>' +
+        feitos.map(p => '<tr><td>'+dataBR(p.d)+'</td><td style="color:var(--tinta3)">'+esc(p.o)+'</td>' +
+        '<td>'+esc(p.q)+'</td><td class="num">'+moeda(p.v)+'</td></tr>').join('') + '</tbody>' +
+        '<tfoot><tr><td colspan="3"><strong>Total pago</strong></td><td class="num"><strong>'+moeda(pagoEscopo)+'</strong></td></tr></tfoot></table></div>'
+      : '<p class="vazio">Nenhum pagamento marcado ainda.</p>', false, true);
+
+  $('#resListas').innerHTML = L;
 }
 
 /* =========================================================
