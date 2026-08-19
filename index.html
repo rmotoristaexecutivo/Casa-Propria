@@ -941,7 +941,7 @@ function painelParcelas(e){
 
 function alternaParcelas(id){
   entradasAbertas[id] = !entradasAbertas[id];
-  renderEntradas();
+  renderEntradas(); blindarAutofill($('#tbEntradas'));
 }
 function setParcela(id, i, campo, valor){
   const e = D.entradas.find(x=>x.id===id); if(!e) return;
@@ -1482,6 +1482,7 @@ function abrirModal(titulo, corpo, podeExcluir){
   $('#mExcluir').style.visibility = podeExcluir ? 'visible' : 'hidden';
   $('#fundo').classList.add('on');
   document.body.style.overflow = 'hidden';
+  blindarAutofill($('#mCorpo'));
   setTimeout(()=>{ const p = $('#mCorpo input, #mCorpo select, #mCorpo textarea'); if(p) p.focus(); }, 40);
 }
 function fecharModal(){
@@ -1644,7 +1645,21 @@ function excluirAtual(){
    Nuvem — Supabase (login por e-mail e senha, dados por usuário)
    ========================================================= */
 const SB = {url:'', key:'', tok:'', ref:'', uid:'', email:'', ultimo:''};
-let _tNuvem, _pullando = false, _ultimoPull = 0;
+let _tNuvem, _pullando = false, _ultimoPull = 0, _pullFeito = false;
+
+/* Um cadastro é "vazio" quando não tem nada que custe dinheiro nem identifique o
+   imóvel. Serve de trava: um navegador recém-aberto nunca sobrescreve a nuvem. */
+function projetoVazio(d){
+  d = d || {};
+  if(n(d.valorImovel)) return false;
+  if((d.entradas||[]).length || (d.custos||[]).length || (d.itens||[]).length) return false;
+  const im = d.imovel || {};
+  if(['construtora','empreendimento','endereco','unidade','torre','matricula'].some(k => (im[k]||'').trim())) return false;
+  const f = d.fin || {};
+  if(n(f.valorFin) || n(f.parcela) || (f.banco||'').trim()) return false;
+  if((d.comodos||[]).some(c => n(c.orcado))) return false;
+  return true;
+}
 
 function sbCarregarCfg(){
   try{
@@ -1735,13 +1750,19 @@ async function sbEntrar(email, senha, criar){
   sbGravarSessao();
 }
 function sbSair(){
-  SB.tok = SB.ref = SB.uid = SB.email = ''; SB.ultimo = '';
+  SB.tok = SB.ref = SB.uid = SB.email = ''; SB.ultimo = ''; _pullFeito = false;
   try{ localStorage.removeItem(CHAVE+'-sb-sessao'); }catch(e){}
   statusPadrao(); abrirNuvem();
 }
 
 async function nuvemEnviar(silencioso){
   if(!sbLigado()) return false;
+  /* Trava contra o caso clássico: navegador novo, cadastro em branco, algo dispara
+     um save (preenchimento automático, por exemplo) e o vazio sobe por cima do bom. */
+  if(silencioso && projetoVazio(D)){
+    statusNuvem('nada a enviar', 'pend');
+    return false;
+  }
   try{
     statusNuvem('enviando…', 'pend');
     const r = await sbFetch('/rest/v1/casa_projeto', {
@@ -1762,6 +1783,8 @@ async function nuvemEnviar(silencioso){
 }
 function nuvemAgendar(){
   if(!sbLigado()) return;
+  /* Enquanto a primeira leitura da nuvem não terminar, nada sobe. */
+  if(!_pullFeito) return;
   clearTimeout(_tNuvem);
   _tNuvem = setTimeout(()=>nuvemEnviar(true), 1200);
 }
@@ -1773,17 +1796,35 @@ async function nuvemBaixar(forcar){
     const r = await sbFetch('/rest/v1/casa_projeto?select=dados,atualizado_em&user_id=eq.' + SB.uid, {method:'GET'});
     if(!r.ok){ statusNuvem('falha ao consultar', 'erro'); return; }
     const linhas = await r.json();
-    if(!linhas.length){ await nuvemEnviar(true); return; }
+    if(!linhas.length){
+      _pullFeito = true;
+      if(!projetoVazio(D)) await nuvemEnviar(false);
+      statusPadrao(); _ultimoPull = Date.now();
+      return;
+    }
     const remoto = linhas[0];
     const tsR = remoto.atualizado_em || '';
     const tsL = D._ts || '';
+    const vazioLocal = projetoVazio(D), vazioRemoto = projetoVazio(remoto.dados||{});
+
+    /* A data só decide quando os dois lados têm conteúdo. Cadastro vazio nunca
+       vence cadastro preenchido, em nenhuma direção. */
+    if(!vazioRemoto && vazioLocal){
+      adotarRemoto(remoto.dados, tsR);
+      SB.ultimo = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+      statusPadrao(); _ultimoPull = Date.now(); _pullFeito = true;
+      if(forcar) toast('Dados baixados da nuvem');
+      return;
+    }
+    if(vazioRemoto && !vazioLocal){
+      _pullFeito = true;
+      await nuvemEnviar(false);
+      _ultimoPull = Date.now();
+      statusPadrao();
+      return;
+    }
     if(forcar || tsR > tsL){
-      D = Object.assign(JSON.parse(JSON.stringify(D_VAZIO)), remoto.dados||{});
-      ['entradas','custos','itens','comodos'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
-      migrarEntradas();
-      D._ts = tsR;
-      try{ localStorage.setItem(CHAVE, JSON.stringify(D)); }catch(e){}
-      tudo();
+      adotarRemoto(remoto.dados, tsR);
       if(forcar) toast('Dados baixados da nuvem');
     } else if(tsL > tsR){
       await nuvemEnviar(true);
@@ -1791,8 +1832,17 @@ async function nuvemBaixar(forcar){
     SB.ultimo = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     statusPadrao();
     _ultimoPull = Date.now();
+    _pullFeito = true;
   }catch(e){ statusNuvem('sem conexão', 'erro'); }
   finally{ _pullando = false; }
+}
+function adotarRemoto(dados, ts){
+  D = Object.assign(JSON.parse(JSON.stringify(D_VAZIO)), dados||{});
+  ['entradas','custos','itens','comodos'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
+  migrarEntradas();
+  D._ts = ts;
+  try{ localStorage.setItem(CHAVE, JSON.stringify(D)); }catch(e){}
+  tudo();
 }
 
 const SQL_NUVEM =
@@ -1909,9 +1959,28 @@ document.addEventListener('keydown', e => {
 /* =========================================================
    Boot
    ========================================================= */
+/* O preenchimento automático do Chrome enxerga campos como "Telefone / e-mail do
+   contato" e injeta valores salvos, o que dispara um save e suja o cadastro.
+   Aqui todo campo do app é marcado para ser ignorado pelos gerenciadores. */
+function blindarAutofill(raiz){
+  (raiz || document).querySelectorAll('input, textarea, select').forEach(el => {
+    if(el.dataset.blindado) return;
+    if(el.id === 'sbEmail' || el.id === 'sbSenha') return;  /* login segue normal */
+    el.setAttribute('autocomplete', 'off');
+    el.setAttribute('autocorrect', 'off');
+    el.setAttribute('autocapitalize', 'off');
+    el.setAttribute('spellcheck', 'false');
+    el.setAttribute('data-lpignore', 'true');
+    el.setAttribute('data-form-type', 'other');
+    if(!el.name) el.name = 'campo-' + Math.random().toString(36).slice(2,9);
+    el.dataset.blindado = '1';
+  });
+}
+
 function tudo(){
   renderKPIs(); renderImovel(); renderEntradas(); renderFin(); renderCustos();
   renderFechamento(); renderPlanta(); renderChips(); renderItens(); renderResumo();
+  blindarAutofill();
 }
 (async function(){
   try{ const t = localStorage.getItem(CHAVE+'-tema'); if(t){ document.documentElement.setAttribute('data-tema', t); $('#btnTema').textContent = t==='claro'?'Tema escuro':'Tema claro'; } }catch(e){}
