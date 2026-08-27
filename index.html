@@ -307,7 +307,7 @@ tr.det:hover > td{background:var(--carta2)}
 .painel-parc{position:sticky; left:0; width:calc(100vw - 60px); max-width:720px}
 .parcs{display:flex; flex-direction:column; gap:7px}
 .parc{
-  display:grid; grid-template-columns:56px 1fr 108px 82px 1fr; gap:9px; align-items:center;
+  display:grid; grid-template-columns:52px 1fr 116px 78px 1fr 96px; gap:8px; align-items:center;
   background:var(--carta); border:1px solid var(--linha); border-radius:11px; padding:8px 10px;
 }
 .parc.quitada{border-color:var(--ok); background:var(--ok-f)}
@@ -316,12 +316,15 @@ tr.det:hover > td{background:var(--carta2)}
 .parc input[type=date]{padding:6px 8px; font-size:13px; border-radius:8px}
 .parc .checa{font-size:12.5px; gap:6px}
 .parc-acoes{display:flex; gap:8px; margin-top:11px; flex-wrap:wrap}
-.parc-cab{display:grid; grid-template-columns:56px 1fr 108px 82px 1fr; gap:9px; padding:0 10px 2px;
+.parc-cab{display:grid; grid-template-columns:52px 1fr 116px 78px 1fr 96px; gap:8px; padding:0 10px 2px;
   font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--tinta3); font-weight:700}
+.parc input.desc{padding:6px 8px; font-size:13px; border-radius:8px; text-align:right}
+.parc input.desc:disabled, .parc input[type=date]:disabled{opacity:.45}
 @media (max-width:640px){
   .parc{grid-template-columns:44px 1fr 1fr; row-gap:7px}
   .parc .v{grid-column:3; text-align:right}
   .parc .checa{grid-column:2} .parc .pgto{grid-column:3}
+  .parc input.desc{grid-column:2/4}
   .parc-cab{display:none}
 }
 
@@ -385,6 +388,11 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
 .sanfona[open] > summary{border-bottom:1px solid var(--linha)}
 .sanfona .conteudo{padding:16px}
 .sanfona .conteudo.zero{padding:0}
+
+.cel-check{width:52px; text-align:center}
+.cel-check .checa{justify-content:center; gap:0}
+.cel-check input{width:19px; height:19px; cursor:pointer}
+
 @media (max-width:880px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
 @media (max-width:880px){
@@ -486,6 +494,16 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
 
     <div class="cartao">
       <div class="cab">
+        <h2>Amortizações e antecipações</h2>
+        <button class="btn primario pequeno" onclick="abrirAmortiz()">Lançar amortização</button>
+      </div>
+      <div class="corpo" style="padding:0">
+        <div class="tab-rolo"><table id="tbAmortiz"></table></div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <div class="cab">
         <h2>Custos de aquisição</h2>
         <div class="junto">
           <button class="btn pequeno" onclick="custosPadrao()">Sugerir custos padrão</button>
@@ -560,7 +578,8 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
     <div id="resListas"></div>
   </section>
 
-  <p class="rodape">Os dados ficam guardados neste navegador. Use <strong>Baixar backup</strong> de vez em quando — é o que permite abrir tudo em outro aparelho.</p>
+  <p class="rodape">Os dados ficam guardados neste navegador. Use <strong>Baixar backup</strong> de vez em quando — é o que permite abrir tudo em outro aparelho.<br>
+    <span class="mono" style="font-size:11.5px" id="rodapeVersao"></span></p>
 </div>
 
 <div class="fundo" id="fundo" onclick="if(event.target===this)fecharModal()">
@@ -584,12 +603,13 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
    Estado
    ========================================================= */
 const CHAVE = 'casa-propria-v1';
+const VERSAO = '2026-08-27-e';
 
 const COMODOS_PADRAO = ['Sala','Cozinha','Lavanderia','Quarto 1','Quarto 2','Banheiro','Terraço','Geral / toda a casa'];
 
 const D_VAZIO = {
   imovel:{}, valorImovel:0,
-  entradas:[], fin:{}, custos:[],
+  entradas:[], fin:{}, custos:[], amortiz:[],
   comodos:[], itens:[]
 };
 let D = JSON.parse(JSON.stringify(D_VAZIO));
@@ -643,7 +663,7 @@ async function carregar(){
   if(!Array.isArray(D.comodos) || !D.comodos.length){
     D.comodos = COMODOS_PADRAO.map(nome => ({id:uid(), nome:nome, larg:'', comp:'', orcado:0}));
   }
-  ['entradas','custos','itens'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
+  ['entradas','custos','itens','amortiz'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
   migrarEntradas();
   if(!D.imovel) D.imovel = {};
   if(!D.fin) D.fin = {};
@@ -690,7 +710,7 @@ function importar(input){
       const novo = JSON.parse(r.result);
       if(!confirm('Isso substitui todos os dados atuais deste navegador. Continuar?')) return;
       D = Object.assign(JSON.parse(JSON.stringify(D_VAZIO)), novo);
-      ['entradas','custos','itens','comodos'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
+      ['entradas','custos','itens','comodos','amortiz'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
       migrarEntradas();
       salvar(); tudo(); toast('Backup restaurado');
     }catch(e){ alert('Arquivo inválido. Escolha um backup baixado por este aplicativo.'); }
@@ -784,6 +804,16 @@ function mesesDepois(iso, k){
   const mm = String(alvo.getMonth()+1).padStart(2,'0'), dd = String(alvo.getDate()).padStart(2,'0');
   return alvo.getFullYear() + '-' + mm + '-' + dd;
 }
+/* Marcar como pago carimba a data de hoje; desmarcar apaga a data e o desconto.
+   O desconto só entra na conta quando o pagamento está marcado. */
+function marcarPago(obj, pago){
+  obj.pago = !!pago;
+  if(pago){ if(!obj.dataPago) obj.dataPago = hojeISO(); }
+  else { obj.dataPago = ''; }
+}
+function descontoDe(obj){ return obj && obj.pago ? n(obj.desconto) : 0; }
+function efetivo(bruto, obj){ return n(bruto) - descontoDe(obj); }
+
 function qtdParcelas(e){ return Math.max(1, Math.round(n(e.parcelas)) || 1); }
 /* A última parcela absorve os centavos da divisão para o total bater exato. */
 function valorParcela(e, i){
@@ -797,21 +827,33 @@ function garantirParcelas(e){
   const novo = [];
   for(let i = 0; i < q; i++){
     const a = antes[i] || {};
-    novo.push({venc: a.venc || mesesDepois(e.data, i), pago: !!a.pago, dataPago: a.dataPago || ''});
+    novo.push({venc: a.venc || mesesDepois(e.data, i), pago: !!a.pago,
+      dataPago: a.dataPago || '', desconto: n(a.desconto)});
   }
   e.pagamentos = novo;
   return novo;
 }
 function pagasEntrada(e){ return garantirParcelas(e).filter(p=>p.pago).length; }
 function pagoEntrada(e){
-  return garantirParcelas(e).reduce((s,p,i)=> s + (p.pago ? valorParcela(e,i) : 0), 0);
+  return garantirParcelas(e).reduce((s,p,i)=> s + (p.pago ? valorParcela(e,i) - n(p.desconto) : 0), 0);
 }
+function descontoEntrada(e){
+  return garantirParcelas(e).reduce((s,p)=> s + (p.pago ? n(p.desconto) : 0), 0);
+}
+/* Todo desconto obtido no projeto: parcelas, custos, itens e antecipações. */
+function descontoTotal(){
+  return D.entradas.reduce((s,e)=>s+descontoEntrada(e),0) +
+    D.custos.reduce((s,c)=>s+descontoDe(c),0) +
+    itensAtivos().reduce((s,i)=>s+descontoDe(i),0) +
+    (D.amortiz||[]).reduce((s,a)=>s+n(a.desconto),0);
+}
+function somaAmortiz(){ return (D.amortiz||[]).reduce((s,a)=>s+n(a.valor),0); }
 function somaCustos(){ return D.custos.reduce((s,c)=>s+n(c.valor),0); }
-function somaCustosPagos(){ return D.custos.filter(c=>c.pago).reduce((s,c)=>s+n(c.valor),0); }
+function somaCustosPagos(){ return D.custos.filter(c=>c.pago).reduce((s,c)=>s+efetivo(c.valor,c),0); }
 function totalItem(it){ return n(it.qtd) * n(it.valorUnit); }
 function itensAtivos(){ return D.itens.filter(i=>i.status !== 'Cancelado'); }
 function somaReforma(){ return itensAtivos().reduce((s,i)=>s+totalItem(i),0); }
-function somaReformaPaga(){ return itensAtivos().filter(i=>i.pago).reduce((s,i)=>s+totalItem(i),0); }
+function somaReformaPaga(){ return itensAtivos().filter(i=>i.pago).reduce((s,i)=>s+efetivo(totalItem(i),i),0); }
 function totalProjeto(){ return n(D.valorImovel) + somaCustos() + somaReforma(); }
 
 
@@ -820,7 +862,7 @@ function totalProjeto(){ return n(D.valorImovel) + somaCustos() + somaReforma();
    ========================================================= */
 function renderKPIs(){
   const imovel = n(D.valorImovel);
-  const desembolsado = somaEntradasPagas() + somaCustosPagos() + somaReformaPaga();
+  const desembolsado = somaEntradasPagas() + somaCustosPagos() + somaReformaPaga() + somaAmortiz();
   $('#k1').textContent = moeda(imovel);
   $('#k1p').textContent = imovel && n(D.imovel.areaPriv) ? moeda(imovel / n(D.imovel.areaPriv)) + ' / m²' : 'sem valor informado';
   $('#k2').textContent = moeda(desembolsado);
@@ -907,7 +949,8 @@ function linhaEntrada(e){
     '<td>'+esc(e.forma||'—')+'</td>' +
     '<td><button class="bt-parc" aria-expanded="'+aberta+'" onclick="alternaParcelas(\''+e.id+'\')">' +
       resumoParc + '<span class="seta">▼</span>' +
-      '<small>'+(pagas ? moeda(pagoEntrada(e))+' pago' : 'nenhuma paga')+'</small></button></td>' +
+      '<small>'+(pagas ? moeda(pagoEntrada(e))+' pago' +
+        (descontoEntrada(e) ? ' · '+moeda(descontoEntrada(e))+' de desconto' : '') : 'nenhuma paga')+'</small></button></td>' +
     '<td>'+dataBR(e.data)+'</td>' +
     '<td>'+situacao+'</td>' +
     '<td class="num" onclick="abrirEntrada(\''+e.id+'\')" style="cursor:pointer"><strong>'+moeda(e.valor)+'</strong></td></tr>';
@@ -919,17 +962,21 @@ function linhaEntrada(e){
 function painelParcelas(e){
   const lista = garantirParcelas(e);
   let h = '<div class="painel-parc"><div class="parc-cab"><span>Parcela</span><span>Vencimento</span><span style="text-align:right">Valor</span>' +
-    '<span>Pago</span><span>Data do pagamento</span></div><div class="parcs">';
-  h += lista.map((p,i) =>
-    '<div class="parc'+(p.pago?' quitada':'')+'">' +
+    '<span>Pago</span><span>Data do pagamento</span><span style="text-align:right">Desconto</span></div><div class="parcs">';
+  h += lista.map((p,i) => {
+    const bruto = valorParcela(e,i), desc = n(p.desconto);
+    return '<div class="parc'+(p.pago?' quitada':'')+'">' +
       '<span class="n">'+(i+1)+'/'+lista.length+'</span>' +
       '<input type="date" value="'+esc(p.venc||'')+'" onchange="setParcela(\''+e.id+'\','+i+',\'venc\',this.value)">' +
-      '<span class="v">'+moeda(valorParcela(e,i))+'</span>' +
+      '<span class="v">'+moeda(bruto)+(desc&&p.pago?'<small style="display:block;color:var(--ok);font-size:11px">pagou '+moeda(bruto-desc)+'</small>':'')+'</span>' +
       '<label class="checa"><input type="checkbox"'+(p.pago?' checked':'')+
         ' onchange="setParcela(\''+e.id+'\','+i+',\'pago\',this.checked)"> pago</label>' +
       '<input class="pgto" type="date" value="'+esc(p.dataPago||'')+'"'+(p.pago?'':' disabled')+
         ' onchange="setParcela(\''+e.id+'\','+i+',\'dataPago\',this.value)">' +
-    '</div>').join('');
+      '<input class="mo desc" value="'+(desc?numFmt(desc):'')+'" placeholder="desconto" title="Desconto obtido nesta parcela"' +
+        (p.pago?'':' disabled')+' onchange="setParcela(\''+e.id+'\','+i+',\'desconto\',n(this.value))">' +
+    '</div>';
+  }).join('');
   h += '</div><div class="parc-acoes">' +
     '<button class="btn pequeno" onclick="marcarParcelas(\''+e.id+'\',true)">Marcar todas como pagas</button>' +
     '<button class="btn pequeno" onclick="marcarParcelas(\''+e.id+'\',false)">Limpar marcações</button>' +
@@ -951,8 +998,9 @@ function setParcela(id, i, campo, valor){
   /* Ao marcar como paga sem informar a data, assume o vencimento —
      evita parcela paga sem data no relatório. */
   if(campo === 'pago'){
-    if(valor && !lista[i].dataPago) lista[i].dataPago = lista[i].venc || hojeISO();
-    if(!valor) lista[i].dataPago = '';
+    /* Carimba o dia em que você clicou; desmarcar limpa data e desconto. */
+    if(valor){ if(!lista[i].dataPago) lista[i].dataPago = hojeISO(); }
+    else { lista[i].dataPago = ''; lista[i].desconto = 0; }
   }
   salvar(); renderEntradas(); renderKPIs(); renderFechamento(); renderResumo();
 }
@@ -960,7 +1008,8 @@ function marcarParcelas(id, pago){
   const e = D.entradas.find(x=>x.id===id); if(!e) return;
   garantirParcelas(e).forEach(p => {
     p.pago = pago;
-    p.dataPago = pago ? (p.dataPago || p.venc || hojeISO()) : '';
+    p.dataPago = pago ? (p.dataPago || hojeISO()) : '';
+    if(!pago) p.desconto = 0;
   });
   salvar(); renderEntradas(); renderKPIs(); renderFechamento(); renderResumo();
   toast(pago ? 'Todas as parcelas marcadas como pagas' : 'Marcações limpas');
@@ -969,7 +1018,7 @@ function quitarAteHoje(id){
   const e = D.entradas.find(x=>x.id===id); if(!e) return;
   const hoje = hojeISO(); let c = 0;
   garantirParcelas(e).forEach(p => {
-    if(!p.pago && p.venc && p.venc <= hoje){ p.pago = true; p.dataPago = p.venc; c++; }
+    if(!p.pago && p.venc && p.venc <= hoje){ p.pago = true; p.dataPago = hoje; c++; }
   });
   salvar(); renderEntradas(); renderKPIs(); renderFechamento(); renderResumo();
   toast(c ? c + ' parcela(s) marcada(s) como paga(s)' : 'Nenhuma parcela vencida em aberto');
@@ -991,25 +1040,45 @@ function renderCustos(){
   const ordem = c => CAT_CUSTO.indexOf(c.categoria||'Outras despesas');
   const linhas = D.custos.slice().sort((a,b)=>ordem(a)-ordem(b)).map(c => {
     const zerado = n(c.valor) === 0;
-    const sit = c.pago ? '<span class="tag pago">pago</span>'
+    const desc = descontoDe(c);
+    const sit = c.pago
+      ? '<span class="tag pago">pago em '+dataBR(c.dataPago)+'</span>'
       : (zerado && c.obs ? '<span class="tag neutra">sem custo</span>' : '<span class="tag aberto">a pagar</span>');
     return '<tr onclick="abrirCusto(\''+c.id+'\')" style="cursor:pointer">' +
+      '<td class="cel-check" onclick="event.stopPropagation()">' +
+        '<label class="checa"><input type="checkbox"'+(c.pago?' checked':'')+
+        ' onchange="baixarPagamento(\'custo\',\''+c.id+'\',this.checked,event)" title="Marcar como pago hoje"></label></td>' +
       '<td><strong>'+esc(c.desc)+'</strong>' +
         '<div style="font-size:12px;color:var(--tinta3)">'+esc(c.categoria||'Outras despesas')+
         (c.forma ? ' · '+esc(c.forma) : '')+'</div></td>' +
       '<td class="obs-cel">'+(c.obs ? esc(c.obs) : '<span style="color:var(--tinta3)">—</span>')+'</td>' +
       '<td>'+dataBR(c.data)+'</td>' +
       '<td>'+sit+'</td>' +
-      '<td class="num"><strong>'+moeda(c.valor)+'</strong></td></tr>';
+      '<td class="num"><strong>'+moeda(c.valor)+'</strong>' +
+        (desc ? '<small style="display:block;color:var(--ok);font-size:11px">pagou '+moeda(n(c.valor)-desc)+'</small>' : '')+'</td></tr>';
   }).join('');
-  t.innerHTML = '<thead><tr><th>Custo</th><th>Observação</th><th>Data</th><th>Situação</th><th class="num">Valor</th></tr></thead>' +
+  t.innerHTML = '<thead><tr><th class="cel-check">Pago</th><th>Custo</th><th>Observação</th><th>Data</th><th>Situação</th><th class="num">Valor</th></tr></thead>' +
     '<tbody>'+linhas+'</tbody>' +
-    '<tfoot><tr><td colspan="3"></td><td><span class="tag pago">'+moeda(somaCustosPagos())+' pago</span></td>' +
+    '<tfoot><tr><td colspan="4"></td><td><span class="tag pago">'+moeda(somaCustosPagos())+' pago</span></td>' +
     '<td class="num"><strong>'+moeda(somaCustos())+'</strong></td></tr></tfoot>';
 }
 
 /* Lançamento rápido, sem abrir o modal. Data, forma e baixa de pagamento
    ficam para a edição — aqui o objetivo é só não perder o valor de vista. */
+/* Baixa rápida direto na tabela: marca, carimba hoje e recalcula tudo. */
+function baixarPagamento(tipo, id, pago, ev){
+  if(ev) ev.stopPropagation();
+  const lista = tipo === 'custo' ? D.custos : D.itens;
+  const obj = lista.find(x => x.id === id);
+  if(!obj) return;
+  marcarPago(obj, pago);
+  if(!pago) obj.desconto = 0;
+  salvar();
+  if(tipo === 'custo') renderCustos(); else renderItens();
+  renderKPIs(); renderResumo();
+  toast(pago ? 'Pago em ' + dataBR(obj.dataPago) : 'Pagamento desmarcado');
+}
+
 function addCustoRapido(){
   const desc = vm('ncDesc').trim();
   if(!desc){ toast('Informe o nome do custo'); document.getElementById('ncDesc').focus(); return; }
@@ -1033,6 +1102,49 @@ function custosPadrao(){
   });
   salvar(); renderCustos(); renderKPIs(); renderResumo();
   toast(add ? add + ' custos adicionados — informe os valores' : 'A lista sugerida já está completa');
+}
+
+const TIPOS_AMORTIZ = ['Amortização — reduz o prazo','Amortização — reduz a parcela','Parcela extra','Quitação total','Portabilidade'];
+
+function renderAmortiz(){
+  const t = $('#tbAmortiz');
+  const lista = (D.amortiz||[]).slice().sort((a,b)=>String(a.data||'').localeCompare(String(b.data||'')));
+  if(!lista.length){
+    t.innerHTML = '<tr><td class="vazio">Pagou parcela adiantada, amortizou ou quitou parte do saldo? Lance aqui. Em antecipação o banco desconta os juros futuros, e é esse desconto que vira economia do projeto.</td></tr>';
+    return;
+  }
+  const linhas = lista.map(a =>
+    '<tr onclick="abrirAmortiz(\''+a.id+'\')" style="cursor:pointer">' +
+    '<td>'+dataBR(a.data)+'</td>' +
+    '<td><strong>'+esc(a.tipo||'Amortização')+'</strong>' +
+      (a.obs ? '<div style="font-size:12px;color:var(--tinta3)">'+esc(a.obs)+'</div>' : '')+'</td>' +
+    '<td class="num" style="color:var(--ok)">'+(n(a.desconto)?moeda(a.desconto):'—')+'</td>' +
+    '<td class="num">'+(n(a.saldoDepois)?moeda(a.saldoDepois):'—')+'</td>' +
+    '<td class="num"><strong>'+moeda(a.valor)+'</strong></td></tr>').join('');
+  const totV = somaAmortiz(), totD = lista.reduce((s,a)=>s+n(a.desconto),0);
+  t.innerHTML = '<thead><tr><th>Data</th><th>Tipo</th><th class="num">Desconto obtido</th>' +
+    '<th class="num">Saldo depois</th><th class="num">Valor pago</th></tr></thead><tbody>'+linhas+'</tbody>' +
+    '<tfoot><tr><td colspan="2"><strong>Total</strong></td>' +
+    '<td class="num" style="color:var(--ok)"><strong>'+moeda(totD)+'</strong></td><td></td>' +
+    '<td class="num"><strong>'+moeda(totV)+'</strong></td></tr></tfoot>';
+}
+
+function abrirAmortiz(id){
+  const a = id ? (D.amortiz||[]).find(x=>x.id===id)
+    : {data:hojeISO(), tipo:'Amortização — reduz o prazo', valor:'', desconto:'', saldoDepois:'', obs:''};
+  if(!a) return;
+  ctx = {tipo:'amortiz', id:id||null};
+  abrirModal(id ? 'Editar amortização' : 'Nova amortização ou antecipação',
+    '<div class="grade">' +
+    '<div class="campo"><label>Data do pagamento</label><input type="date" id="aData" value="'+esc(a.data||'')+'"></div>' +
+    '<div class="campo l2"><label>Tipo</label><select id="aTipo">'+opcoes(TIPOS_AMORTIZ, a.tipo)+'</select></div>' +
+    '<div class="campo"><label>Valor pago</label><input class="mo" id="aValor" value="'+(n(a.valor)?numFmt(a.valor):'')+'" placeholder="0,00"></div>' +
+    '<div class="campo l2"><label>Desconto obtido (juros abatidos)</label><input class="mo" id="aDesc" value="'+(n(a.desconto)?numFmt(a.desconto):'')+'" placeholder="0,00"></div>' +
+    '<div class="campo l2"><label>Saldo devedor depois</label><input class="mo" id="aSaldo" value="'+(n(a.saldoDepois)?numFmt(a.saldoDepois):'')+'" placeholder="0,00"></div>' +
+    '<div class="campo l4"><label>Observações</label><textarea id="aObs" placeholder="Ex.: usei FGTS, reduziu 14 meses de prazo">'+esc(a.obs||'')+'</textarea></div>' +
+    '</div>' +
+    '<div class="aviso ok">O valor pago entra no “já desembolsado”. O desconto não é dinheiro que saiu — ele aparece separado, como economia obtida na negociação.</div>',
+    !!id);
 }
 
 /* =========================================================
@@ -1140,7 +1252,11 @@ function renderItens(){
     const medida = n(i.medida) ? numFmt(i.medida,2) + ' ' + (i.unidade||'') : '—';
     const parc = n(i.parcelas) > 1 ? numFmt(i.parcelas,0)+'x de '+moeda(totalItem(i)/n(i.parcelas)) : (i.forma||'—');
     const desc = esc(i.desc) + (i.profissao ? ' <span class="tag roxa">'+esc(i.profissao)+'</span>' : '');
+    const descI = descontoDe(i);
     return '<tr onclick="abrirItem(\''+i.id+'\')" style="cursor:pointer'+(i.status==='Cancelado'?';opacity:.5':'')+'">' +
+      '<td class="cel-check" onclick="event.stopPropagation()">' +
+        '<label class="checa"><input type="checkbox"'+(i.pago?' checked':'')+
+        ' onchange="baixarPagamento(\'item\',\''+i.id+'\',this.checked,event)" title="Marcar como pago hoje"></label></td>' +
       '<td><strong>'+desc+'</strong><div style="font-size:12px;color:var(--tinta3)">'+esc(i.categoria||'')+
         (filtroComodo==='todos' ? ' · '+esc(comodoNome(i.comodoId)) : '')+'</div></td>' +
       '<td>'+esc(i.empresa||'—')+'</td>' +
@@ -1148,15 +1264,17 @@ function renderItens(){
       '<td class="num">'+numFmt(i.qtd,2)+'</td>' +
       '<td class="num">'+moeda(i.valorUnit)+'</td>' +
       '<td>'+parc+'</td>' +
-      '<td><span class="tag '+(TAG_STATUS[i.status]||'plan')+'">'+esc(i.status||'Orçado')+'</span>'+(i.pago?' <span class="tag pago">pago</span>':'')+'</td>' +
-      '<td class="num"><strong>'+moeda(totalItem(i))+'</strong></td></tr>';
+      '<td><span class="tag '+(TAG_STATUS[i.status]||'plan')+'">'+esc(i.status||'Orçado')+'</span>'+
+        (i.pago?' <span class="tag pago">pago em '+dataBR(i.dataPago)+'</span>':'')+'</td>' +
+      '<td class="num"><strong>'+moeda(totalItem(i))+'</strong>' +
+        (descI ? '<small style="display:block;color:var(--ok);font-size:11px">pagou '+moeda(totalItem(i)-descI)+'</small>' : '')+'</td></tr>';
   }).join('');
   const tot = lista.filter(i=>i.status!=='Cancelado').reduce((s,i)=>s+totalItem(i),0);
-  const pg = lista.filter(i=>i.status!=='Cancelado' && i.pago).reduce((s,i)=>s+totalItem(i),0);
-  t.innerHTML = '<thead><tr><th>Item</th><th>Empresa</th><th class="num">Medida</th><th class="num">Qtd</th>' +
+  const pg = lista.filter(i=>i.status!=='Cancelado' && i.pago).reduce((s,i)=>s+efetivo(totalItem(i),i),0);
+  t.innerHTML = '<thead><tr><th class="cel-check">Pago</th><th>Item</th><th>Empresa</th><th class="num">Medida</th><th class="num">Qtd</th>' +
     '<th class="num">Valor un.</th><th>Pagamento</th><th>Situação</th><th class="num">Total</th></tr></thead>' +
     '<tbody>'+linhas+'</tbody>' +
-    '<tfoot><tr><td colspan="6"></td><td><span class="tag pago">'+moeda(pg)+' pago</span></td>' +
+    '<tfoot><tr><td colspan="7"></td><td><span class="tag pago">'+moeda(pg)+' pago</span></td>' +
     '<td class="num"><strong>'+moeda(tot)+'</strong></td></tr></tfoot>';
 }
 
@@ -1189,7 +1307,7 @@ function porForma(){
   const m = {};
   const add = (f,v) => { const k = (f||'').trim() || 'Não informada'; m[k] = (m[k]||0) + v; };
   D.entradas.forEach(e => add(e.forma, n(e.valor)));
-  D.custos.forEach(c => add(c.forma, n(c.valor)));
+  D.custos.forEach(c => add(c.forma, efetivo(c.valor,c)));
   itensAtivos().forEach(i => add(i.forma, totalItem(i)));
   return Object.keys(m).map(k => ({nome:k, valor:m[k]})).sort((a,b)=>b.valor-a.valor);
 }
@@ -1204,10 +1322,11 @@ function fluxoMensal(escopo){
   };
   if(escopo !== 'reforma'){
     D.entradas.forEach(e => garantirParcelas(e).forEach((p,idx) => põe(p.pago ? (p.dataPago||p.venc) : p.venc, valorParcela(e,idx), p.pago)));
-    D.custos.forEach(c => põe(c.data, n(c.valor), c.pago));
+    D.custos.forEach(c => põe(c.pago ? (c.dataPago||c.data) : c.data, efetivo(c.valor,c), c.pago));
+    (D.amortiz||[]).forEach(a => põe(a.data, n(a.valor), true));
   }
   if(escopo !== 'compra'){
-    itensAtivos().forEach(i => põe(i.data, totalItem(i), i.pago));
+    itensAtivos().forEach(i => põe(i.pago ? (i.dataPago||i.data) : i.data, efetivo(totalItem(i),i), i.pago));
   }
   return Object.keys(m).sort().map(k => Object.assign({mes:k}, m[k]));
 }
@@ -1303,7 +1422,8 @@ function renderResumo(){
   const escopo = (document.getElementById('filtroRes')||{}).value || 'tudo';
   const imovel = n(D.valorImovel), ent = somaEntradas(), fin = n(D.fin.valorFin);
   const custos = somaCustos(), ref = somaReforma();
-  const pagoCompra = somaEntradasPagas() + somaCustosPagos(), pagoRef = somaReformaPaga();
+  const pagoCompra = somaEntradasPagas() + somaCustosPagos() + somaAmortiz(), pagoRef = somaReformaPaga();
+  const economia = descontoTotal();
 
   const totalEscopo = escopo === 'compra' ? imovel + custos : escopo === 'reforma' ? ref : imovel + custos + ref;
   const pagoEscopo  = escopo === 'compra' ? pagoCompra : escopo === 'reforma' ? pagoRef : pagoCompra + pagoRef;
@@ -1322,6 +1442,8 @@ function renderResumo(){
       (D.fin.prazo ? ' · '+numFmt(D.fin.prazo,0)+'x' : ''), 'var(--c6)');
     stats += st('Custos de aquisição', moeda(custos),
       D.custos.filter(c=>!c.pago && n(c.valor)>0).length + ' em aberto', 'var(--c5)');
+    if(somaAmortiz()) stats += st('Amortizações', moeda(somaAmortiz()),
+      (D.amortiz||[]).length + ' antecipações', 'var(--c6)');
   }
   if(escopo !== 'compra'){
     stats += st('Reforma', moeda(ref), itensAtivos().length + ' itens lançados', 'var(--c3)');
@@ -1334,6 +1456,8 @@ function renderResumo(){
     stats += st('Ambientes com gasto', String(porComodo().filter(c=>c.gasto>0).length),
       'de ' + D.comodos.length + ' cadastrados', 'var(--c4)');
   }
+  if(economia) stats += st('Descontos obtidos', moeda(economia),
+    'juros abatidos e negociações', 'var(--ok)');
   const pctPago = totalEscopo ? pagoEscopo/totalEscopo*100 : 0;
   let topo = '<div class="stats">'+stats+'</div>';
   topo += '<div class="lb-topo" style="font-size:14px"><span class="rot">Já desembolsado</span>' +
@@ -1450,13 +1574,16 @@ function renderResumo(){
       const q = qtdParcelas(e);
       garantirParcelas(e).forEach((p,i) => {
         if(!p.pago) return;
-        feitos.push({d:p.dataPago||p.venc, o:'Entrada', q:(e.desc||e.tipo||'Entrada')+(q>1?' — parcela '+(i+1)+'/'+q:''), v:valorParcela(e,i)});
+        feitos.push({d:p.dataPago||p.venc, o:'Entrada', q:(e.desc||e.tipo||'Entrada')+(q>1?' — parcela '+(i+1)+'/'+q:'')+
+          (n(p.desconto)?' (desconto de '+moeda(p.desconto)+')':''), v:valorParcela(e,i)-n(p.desconto)});
       });
     });
-    D.custos.filter(c=>c.pago).forEach(c => feitos.push({d:c.data, o:'Aquisição', q:c.desc, v:n(c.valor)}));
+    D.custos.filter(c=>c.pago).forEach(c => feitos.push({d:c.dataPago||c.data, o:'Aquisição', q:c.desc, v:efetivo(c.valor,c)}));
+    (D.amortiz||[]).forEach(a => feitos.push({d:a.data, o:'Financiamento', q:(a.tipo||'Amortização')+
+      (n(a.desconto)?' (desconto de '+moeda(a.desconto)+')':''), v:n(a.valor)}));
   }
   if(escopo !== 'compra'){
-    itensAtivos().filter(i=>i.pago).forEach(i => feitos.push({d:i.data, o:'Reforma · '+comodoNome(i.comodoId), q:i.desc, v:totalItem(i)}));
+    itensAtivos().filter(i=>i.pago).forEach(i => feitos.push({d:i.dataPago||i.data, o:'Reforma · '+comodoNome(i.comodoId), q:i.desc, v:efetivo(totalItem(i),i)}));
   }
   feitos.sort((a,b)=>String(b.d||'').localeCompare(String(a.d||'')));
   L += sanfona('Já pago', feitos.length ? feitos.length + ' lançamentos' : '',
@@ -1522,7 +1649,10 @@ function abrirCusto(id){
     '<div class="campo"><label>Valor</label><input class="mo" id="cValor" value="'+(n(c.valor)?numFmt(c.valor):'')+'" placeholder="0,00"></div>' +
     '<div class="campo"><label>Forma de pagamento</label><select id="cForma">'+opcoes(FORMAS, c.forma)+'</select></div>' +
     '<div class="campo"><label>Data</label><input type="date" id="cData" value="'+esc(c.data)+'"></div>' +
-    '<div class="campo"><label>&nbsp;</label><label class="checa"><input type="checkbox" id="cPago"'+(c.pago?' checked':'')+'> Já pago</label></div>' +
+    '<div class="campo"><label>&nbsp;</label><label class="checa"><input type="checkbox" id="cPago"'+(c.pago?' checked':'')+
+      ' onchange="autoDataPgto(this,\'cDataPago\',\'cDesc0\')"> Já pago</label></div>' +
+    '<div class="campo"><label>Data do pagamento</label><input type="date" id="cDataPago" value="'+esc(c.dataPago||'')+'"'+(c.pago?'':' disabled')+'></div>' +
+    '<div class="campo"><label>Desconto obtido</label><input class="mo" id="cDesc0" value="'+(n(c.desconto)?numFmt(c.desconto):'')+'" placeholder="0,00"'+(c.pago?'':' disabled')+'></div>' +
     '<div class="campo l4"><label>Observações</label><textarea id="cObs" placeholder="Ex.: isento pela construtora, incluso no contrato, cortesia do banco">'+esc(c.obs)+'</textarea></div>' +
     '<div class="campo l4"><span class="dica">Valor zerado com observação preenchida aparece na lista como “sem custo”, em vez de “a pagar”.</span></div>' +
     '</div>', !!id);
@@ -1569,12 +1699,29 @@ function abrirItem(id){
     '<div class="campo"><label>Nº de parcelas</label><input class="mo" id="iParc" value="'+(n(i.parcelas)||1)+'" oninput="calcItem()"></div>' +
     '<div class="campo"><label>Situação</label><select id="iStatus">'+opcoes(STATUS_ITEM, i.status||'Orçado')+'</select></div>' +
     '<div class="campo"><label>Data da compra / serviço</label><input type="date" id="iData" value="'+esc(i.data)+'"></div>' +
-    '<div class="campo l2"><label>&nbsp;</label><label class="checa"><input type="checkbox" id="iPago"'+(i.pago?' checked':'')+'> Já pago</label></div>' +
+    '<div class="campo"><label>&nbsp;</label><label class="checa"><input type="checkbox" id="iPago"'+(i.pago?' checked':'')+
+      ' onchange="autoDataPgto(this,\'iDataPago\',\'iDesconto\')"> Já pago</label></div>' +
+    '<div class="campo"><label>Data do pagamento</label><input type="date" id="iDataPago" value="'+esc(i.dataPago||'')+'"'+(i.pago?'':' disabled')+'></div>' +
+    '<div class="campo"><label>Desconto obtido</label><input class="mo" id="iDesconto" value="'+(n(i.desconto)?numFmt(i.desconto):'')+'" placeholder="0,00"'+(i.pago?'':' disabled')+'></div>' +
     '<div class="campo l2"><label>Total do item</label><input class="mo" id="iTotal" readonly></div>' +
     '<div class="campo l4"><label>Observações</label><textarea id="iObs">'+esc(i.obs)+'</textarea></div>' +
     '</div>', !!id);
   calcItem();
 }
+/* Ao marcar "já pago" dentro do modal, preenche a data de hoje e libera o
+   desconto; ao desmarcar, limpa os dois. */
+function autoDataPgto(check, idData, idDesc){
+  const d = document.getElementById(idData), x = document.getElementById(idDesc);
+  if(!d) return;
+  if(check.checked){
+    d.disabled = false; if(x) x.disabled = false;
+    if(!d.value) d.value = hojeISO();
+  } else {
+    d.value = ''; d.disabled = true;
+    if(x){ x.value = ''; x.disabled = true; }
+  }
+}
+
 function alternaProfissao(){
   const box = document.getElementById('boxProf');
   if(box) box.style.display = (vm('iCat') === 'Mão de obra') ? '' : 'none';
@@ -1597,7 +1744,15 @@ function salvarModal(){
     } else { fecharModal(); }
     return;
   }
-  if(ctx.tipo === 'entrada'){
+  if(ctx.tipo === 'amortiz'){
+    const obj = {data:vm('aData'), tipo:vm('aTipo')||'Amortização', valor:n(vm('aValor')),
+      desconto:n(vm('aDesc')), saldoDepois:n(vm('aSaldo')), obs:vm('aObs')};
+    if(!obj.valor){ toast('Informe o valor pago'); return; }
+    if(!Array.isArray(D.amortiz)) D.amortiz = [];
+    if(ctx.id) Object.assign(D.amortiz.find(x=>x.id===ctx.id), obj);
+    else D.amortiz.push(Object.assign({id:uid()}, obj));
+  }
+  else if(ctx.tipo === 'entrada'){
     const obj = {desc:vm('eDesc'), tipo:vm('eTipo'), forma:vm('eForma'), valor:n(vm('eValor')),
       parcelas:Math.max(1,Math.round(n(vm('eParc')))||1), data:vm('eData'), obs:vm('eObs')};
     if(!obj.desc && !obj.tipo){ toast('Dê um nome ou escolha o tipo da entrada'); return; }
@@ -1608,7 +1763,9 @@ function salvarModal(){
     garantirParcelas(alvo);
   }
   else if(ctx.tipo === 'custo'){
-    const obj = {desc:vm('cDesc'), categoria:vm('cCat')||'Outros', valor:n(vm('cValor')), forma:vm('cForma'), data:vm('cData'), pago:cm('cPago'), obs:vm('cObs')};
+    const obj = {desc:vm('cDesc'), categoria:vm('cCat')||'Outros', valor:n(vm('cValor')), forma:vm('cForma'),
+      data:vm('cData'), pago:cm('cPago'), dataPago:cm('cPago')?(vm('cDataPago')||hojeISO()):'',
+      desconto:cm('cPago')?n(vm('cDesc0')):0, obs:vm('cObs')};
     if(!obj.desc){ toast('Informe o nome do custo'); return; }
     if(ctx.id) Object.assign(D.custos.find(x=>x.id===ctx.id), obj);
     else D.custos.push(Object.assign({id:uid()}, obj));
@@ -1624,7 +1781,8 @@ function salvarModal(){
       desc:vm('iDesc'), empresa:vm('iEmp'), contato:vm('iCont'), medida:n(vm('iMed')), unidade:vm('iUnid'),
       qtd:n(vm('iQtd'))||1, valorUnit:n(vm('iVal')), forma:vm('iForma'),
       parcelas:Math.max(1,Math.round(n(vm('iParc')))||1), status:vm('iStatus')||'Orçado',
-      pago:cm('iPago'), data:vm('iData'), obs:vm('iObs')};
+      pago:cm('iPago'), dataPago:cm('iPago')?(vm('iDataPago')||hojeISO()):'',
+      desconto:cm('iPago')?n(vm('iDesconto')):0, data:vm('iData'), obs:vm('iObs')};
     if(!obj.desc){ toast('Descreva o que é o item'); return; }
     if(ctx.id) Object.assign(D.itens.find(x=>x.id===ctx.id), obj);
     else D.itens.push(Object.assign({id:uid()}, obj));
@@ -1633,9 +1791,9 @@ function salvarModal(){
 }
 function excluirAtual(){
   if(!ctx || !ctx.id) return;
-  const rotulo = {entrada:'esta entrada', custo:'este custo', comodo:'este cômodo', item:'este item'}[ctx.tipo];
+  const rotulo = {entrada:'esta entrada', custo:'este custo', comodo:'este cômodo', item:'este item', amortiz:'esta amortização'}[ctx.tipo];
   if(!confirm('Excluir ' + rotulo + '? Não dá para desfazer.')) return;
-  const chave = {entrada:'entradas', custo:'custos', comodo:'comodos', item:'itens'}[ctx.tipo];
+  const chave = {entrada:'entradas', custo:'custos', comodo:'comodos', item:'itens', amortiz:'amortiz'}[ctx.tipo];
   D[chave] = D[chave].filter(x => x.id !== ctx.id);
   if(ctx.tipo === 'comodo' && filtroComodo === ctx.id) filtroComodo = 'todos';
   salvar(); fecharModal(); tudo(); toast('Excluído');
@@ -1806,6 +1964,13 @@ async function nuvemBaixar(forcar){
     const tsR = remoto.atualizado_em || '';
     const tsL = D._ts || '';
     const vazioLocal = projetoVazio(D), vazioRemoto = projetoVazio(remoto.dados||{});
+    const dR = remoto.dados || {};
+    SB.diag = (vazioRemoto ? 'nuvem vazia' :
+        moeda(dR.valorImovel) + ' · ' + (dR.entradas||[]).length + ' entradas · ' + (dR.itens||[]).length + ' itens') +
+      ' · gravada em ' + (tsR ? new Date(tsR).toLocaleString('pt-BR') : '?') +
+      ' · decisão: ' + (!vazioRemoto && vazioLocal ? 'baixar da nuvem'
+        : vazioRemoto && !vazioLocal ? 'enviar o local (nuvem estava vazia)'
+        : tsR > tsL ? 'baixar (nuvem mais nova)' : 'manter o local');
 
     /* A data só decide quando os dois lados têm conteúdo. Cadastro vazio nunca
        vence cadastro preenchido, em nenhuma direção. */
@@ -1838,7 +2003,7 @@ async function nuvemBaixar(forcar){
 }
 function adotarRemoto(dados, ts){
   D = Object.assign(JSON.parse(JSON.stringify(D_VAZIO)), dados||{});
-  ['entradas','custos','itens','comodos'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
+  ['entradas','custos','itens','comodos','amortiz'].forEach(k => { if(!Array.isArray(D[k])) D[k] = []; });
   migrarEntradas();
   D._ts = ts;
   try{ localStorage.setItem(CHAVE, JSON.stringify(D)); }catch(e){}
@@ -1880,7 +2045,7 @@ function abrirNuvem(){
       '<button class="btn pequeno" onclick="trocarProjeto()">Trocar projeto do Supabase</button></div></div>' +
       '</div><div id="sbMsg"></div>';
   } else {
-    corpo = '<div class="grade">' +
+    corpo = diagnostico() + '<div class="grade">' +
       '<div class="campo l2"><label>Conectado como</label><input value="'+esc(SB.email)+'" readonly></div>' +
       '<div class="campo l2"><label>Última sincronização</label><input value="'+esc(SB.ultimo||'ainda não')+'" readonly></div>' +
       '<div class="campo l4"><div class="junto">' +
@@ -1893,6 +2058,20 @@ function abrirNuvem(){
   abrirModal('Sincronização na nuvem', corpo, false);
   $('#mExcluir').style.visibility = 'hidden';
 }
+/* Mostra, em texto, o que existe de cada lado e qual foi a última decisão da
+   sincronização. É o que responde "por que abriu vazio?" sem abrir o console. */
+function diagnostico(){
+  const linhas = [
+    ['Versão do app', VERSAO],
+    ['Neste navegador', projetoVazio(D) ? 'cadastro vazio'
+      : moeda(D.valorImovel) + ' · ' + D.entradas.length + ' entradas · ' + D.custos.length + ' custos · ' + D.itens.length + ' itens'],
+    ['Carimbo local', D._ts ? new Date(D._ts).toLocaleString('pt-BR') : 'nunca salvo'],
+    ['Última leitura da nuvem', SB.diag || 'ainda não consultada']
+  ];
+  return '<div class="aviso ok" style="margin:0 0 14px"><strong>Diagnóstico</strong><br>' +
+    linhas.map(l => '<span style="color:var(--tinta3)">'+l[0]+':</span> '+esc(l[1])).join('<br>') + '</div>';
+}
+
 function trocarProjeto(){
   SB.url = ''; SB.key = ''; sbGravarCfg(); abrirNuvem();
 }
@@ -1979,13 +2158,15 @@ function blindarAutofill(raiz){
 
 function tudo(){
   renderKPIs(); renderImovel(); renderEntradas(); renderFin(); renderCustos();
-  renderFechamento(); renderPlanta(); renderChips(); renderItens(); renderResumo();
+  renderAmortiz(); renderFechamento(); renderPlanta(); renderChips(); renderItens(); renderResumo();
   blindarAutofill();
 }
 (async function(){
   try{ const t = localStorage.getItem(CHAVE+'-tema'); if(t){ document.documentElement.setAttribute('data-tema', t); $('#btnTema').textContent = t==='claro'?'Tema escuro':'Tema claro'; } }catch(e){}
   await carregar();
   tudo();
+  const rv = document.getElementById('rodapeVersao');
+  if(rv) rv.textContent = 'versão ' + VERSAO;
   sbCarregarCfg();
   statusPadrao();
   if(sbLigado()) nuvemBaixar(false);
