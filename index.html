@@ -114,7 +114,7 @@ html[data-tema="escuro"] .btn.primario{color:#08121F}
 }
 
 /* ---------- indicadores ---------- */
-.kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:11px; margin:18px 0}
+.kpis{display:grid; grid-template-columns:repeat(auto-fit, minmax(196px,1fr)); gap:11px; margin:18px 0}
 .kpi{
   background:var(--carta); border:1px solid var(--linha); border-radius:var(--raio);
   padding:14px 15px; position:relative; overflow:hidden; box-shadow:var(--sombra);
@@ -123,13 +123,15 @@ html[data-tema="escuro"] .btn.primario{color:#08121F}
 .kpi:nth-child(1)::before{background:var(--c1)}
 .kpi:nth-child(2)::before{background:var(--c2)}
 .kpi:nth-child(3)::before{background:var(--c3)}
-.kpi:nth-child(4)::before{background:var(--latao)}
+.kpi:nth-child(4)::before{background:var(--c4)}
+.kpi:nth-child(5)::before{background:var(--latao)}
 html[data-tema="escuro"] .kpi::before{width:0}
 .kpi .rot{font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--tinta3); font-weight:700}
 .kpi .val{font-family:"JetBrains Mono",monospace; font-size:21px; font-weight:700; margin:6px 0 2px; letter-spacing:-.04em}
 .kpi:nth-child(1) .val{color:var(--c1)}
 .kpi:nth-child(2) .val{color:var(--c2)}
 .kpi:nth-child(3) .val{color:var(--c3)}
+.kpi:nth-child(4) .val{color:var(--c4)}
 .kpi .pe{font-size:11.5px; color:var(--tinta3)}
 .kpi.destaque{background:var(--latao-f); border-color:var(--latao-borda)}
 .kpi.destaque .val{color:var(--latao)}
@@ -393,6 +395,16 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
 .cel-check .checa{justify-content:center; gap:0}
 .cel-check input{width:19px; height:19px; cursor:pointer}
 
+
+/* ---------- cartões recolhíveis ---------- */
+.cartao > .cab{cursor:pointer; user-select:none}
+.seta-cartao{color:var(--tinta3); font-size:13px; transition:.15s; margin-left:6px; flex:none}
+.cartao:not(.recolhido) > .cab .seta-cartao{transform:rotate(180deg)}
+.cartao > .cab:hover h2{color:var(--acento)}
+.cartao.recolhido > *:not(.cab){display:none}
+.cartao.recolhido > .cab{border-bottom:0}
+.resumo-cab{font-size:11.5px; color:var(--tinta3); font-family:"JetBrains Mono",monospace; white-space:nowrap}
+
 @media (max-width:880px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
 @media (max-width:880px){
@@ -439,6 +451,8 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
         <button role="menuitem" onclick="fecharMenu(); document.getElementById('arqImp').click()">Restaurar backup</button>
         <div class="sep"></div>
         <div class="rot-menu">Tela</div>
+        <button role="menuitem" onclick="todosCartoes(true)">Abrir todos os blocos</button>
+        <button role="menuitem" onclick="todosCartoes(false)">Recolher todos</button>
         <button role="menuitem" onclick="trocarTema()" id="btnTema">Tema escuro</button>
         <button role="menuitem" onclick="fecharMenu(); window.print()">Imprimir</button>
       </div>
@@ -453,6 +467,7 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
     <div class="kpi"><div class="rot">Valor do imóvel</div><div class="val" id="k1">—</div><div class="pe" id="k1p"></div></div>
     <div class="kpi"><div class="rot">Já desembolsado</div><div class="val" id="k2">—</div><div class="pe" id="k2p">entradas + custos + reforma pagos</div></div>
     <div class="kpi"><div class="rot">Reforma</div><div class="val" id="k3">—</div><div class="pe" id="k3p"></div></div>
+    <div class="kpi"><div class="rot">Falta pagar</div><div class="val" id="k5">—</div><div class="pe" id="k5p"></div></div>
     <div class="kpi destaque"><div class="rot">Custo total do projeto</div><div class="val" id="k4">—</div><div class="pe" id="k4p">imóvel + custos + reforma</div></div>
   </div>
 
@@ -603,7 +618,7 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
    Estado
    ========================================================= */
 const CHAVE = 'casa-propria-v1';
-const VERSAO = '2026-08-27-e';
+const VERSAO = '2026-08-27-g';
 
 const COMODOS_PADRAO = ['Sala','Cozinha','Lavanderia','Quarto 1','Quarto 2','Banheiro','Terraço','Geral / toda a casa'];
 
@@ -870,7 +885,17 @@ function renderKPIs(){
   $('#k3p').textContent = moeda(somaReformaPaga()) + ' já pago · ' + itensAtivos().length + ' itens';
   $('#k4').textContent = moeda(totalProjeto());
 
+  /* Pagar não barateia o projeto — o que muda é quanto ainda falta.
+     O saldo financiado continua contando aqui, porque ainda é dívida sua. */
+  const falta = Math.max(0, totalProjeto() - desembolsado);
+  $('#k5').textContent = moeda(falta);
+  const fin = n(D.fin.valorFin) - somaAmortiz();
+  $('#k5p').textContent = fin > 0
+    ? 'sendo ' + moeda(fin) + ' financiados' + (n(D.fin.prazo) ? ' em ' + numFmt(D.fin.prazo,0) + 'x' : '')
+    : 'custo total menos o que já saiu do bolso';
+
   document.title = (D.imovel.empreendimento ? D.imovel.empreendimento + ' — ' : '') + 'Casa própria';
+  atualizarResumosCab();
 }
 
 /* =========================================================
@@ -1456,6 +1481,15 @@ function renderResumo(){
     stats += st('Ambientes com gasto', String(porComodo().filter(c=>c.gasto>0).length),
       'de ' + D.comodos.length + ' cadastrados', 'var(--c4)');
   }
+  if(escopo !== 'reforma' && n(D.fin.parcela) && n(D.fin.prazo)){
+    /* O financiamento cobra juros: o desembolso real é a soma das parcelas.
+       No SAC a parcela cai, então o número é um teto de referência. */
+    const jurosTotal = n(D.fin.parcela) * n(D.fin.prazo);
+    const comJuros = ent + custos + ref + jurosTotal;
+    stats += st('Custo com o financiamento', moeda(comJuros),
+      (D.fin.sistema === 'SAC' ? 'teto: no SAC a parcela cai' : 'entrada + custos + reforma + 360 parcelas')
+        .replace('360', numFmt(D.fin.prazo,0)), 'var(--alerta)');
+  }
   if(economia) stats += st('Descontos obtidos', moeda(economia),
     'juros abatidos e negociações', 'var(--ok)');
   const pctPago = totalEscopo ? pagoEscopo/totalEscopo*100 : 0;
@@ -1595,6 +1629,7 @@ function renderResumo(){
       : '<p class="vazio">Nenhum pagamento marcado ainda.</p>', false, true);
 
   $('#resListas').innerHTML = L;
+  aplicarRecolher();
 }
 
 /* =========================================================
@@ -2141,6 +2176,92 @@ document.addEventListener('keydown', e => {
 /* O preenchimento automático do Chrome enxerga campos como "Telefone / e-mail do
    contato" e injeta valores salvos, o que dispara um save e suja o cadastro.
    Aqui todo campo do app é marcado para ser ignorado pelos gerenciadores. */
+/* Cartões nascem recolhidos; o que você abre fica aberto nas próximas visitas.
+   Cliques em botões, selects e campos do cabeçalho não recolhem o cartão. */
+const CH_ABERTOS = CHAVE + '-abertos';
+let cartoesAbertos = {};
+function carregarAbertos(){
+  try{ cartoesAbertos = JSON.parse(localStorage.getItem(CH_ABERTOS) || '{}'); }catch(e){ cartoesAbertos = {}; }
+}
+function gravarAbertos(){
+  try{ localStorage.setItem(CH_ABERTOS, JSON.stringify(cartoesAbertos)); }catch(e){}
+}
+function chaveCartao(c){
+  const t = c.querySelector('.cab h2');
+  return (t ? t.textContent : '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+}
+function aplicarRecolher(){
+  document.querySelectorAll('.cartao').forEach(c => {
+    if(c.closest('.modal')) return;
+    const cab = c.querySelector(':scope > .cab');
+    if(!cab) return;
+    const k = chaveCartao(c);
+    if(!k) return;
+    c.dataset.cartao = k;
+    if(!cab.querySelector('.seta-cartao')){
+      const s = document.createElement('span');
+      s.className = 'seta-cartao'; s.textContent = '▾';
+      cab.appendChild(s);
+      cab.addEventListener('click', ev => {
+        if(ev.target.closest('button, select, input, textarea, a, label')) return;
+        alternarCartao(c);
+      });
+    }
+    resumoNoCabecalho(cab, k);
+    c.classList.toggle('recolhido', !cartoesAbertos[k]);
+  });
+}
+/* Recolhido não pode ser cego: o cabeçalho carrega o número do bloco. */
+/* Atualiza só os totais dos cabeçalhos, sem redesenhar os cartões. */
+function atualizarResumosCab(){
+  document.querySelectorAll('.cartao[data-cartao]').forEach(c => {
+    const cab = c.querySelector(':scope > .cab');
+    if(cab) resumoNoCabecalho(cab, c.dataset.cartao);
+  });
+}
+function resumoNoCabecalho(cab, k){
+  const mapa = {
+    'imovel-e-vendedor': () => n(D.valorImovel) ? moeda(D.valorImovel) : '',
+    'entrada': () => {
+      if(!D.entradas.length) return '';
+      const pagas = D.entradas.reduce((s,e)=>s+pagasEntrada(e),0);
+      const tot = D.entradas.reduce((s,e)=>s+qtdParcelas(e),0);
+      return moeda(somaEntradas()) + ' · ' + pagas + '/' + tot + ' pagas';
+    },
+    'financiamento-bancario': () => n(D.fin.valorFin)
+      ? moeda(D.fin.valorFin) + (n(D.fin.parcela) ? ' · ' + moeda(D.fin.parcela) + '/mês' : '') : '',
+    'amortizacoes-e-antecipacoes': () => somaAmortiz() ? moeda(somaAmortiz()) : '',
+    'custos-de-aquisicao': () => D.custos.length ? moeda(somaCustos()) + ' · ' + D.custos.length + ' itens' : '',
+    'comodos': () => D.comodos.length + ' ambientes',
+    'itens-da-reforma': () => itensAtivos().length
+      ? moeda(somaReforma()) + ' · ' + itensAtivos().length + ' itens' : ''
+  };
+  const txt = mapa[k] ? mapa[k]() : '';
+  let sp = cab.querySelector('.resumo-cab');
+  if(txt){
+    if(!sp){
+      sp = document.createElement('span'); sp.className = 'resumo-cab';
+      cab.insertBefore(sp, cab.querySelector('.seta-cartao'));
+    }
+    sp.textContent = txt;
+  } else if(sp) sp.remove();
+}
+function alternarCartao(c){
+  const k = c.dataset.cartao;
+  cartoesAbertos[k] = !cartoesAbertos[k];
+  c.classList.toggle('recolhido', !cartoesAbertos[k]);
+  gravarAbertos();
+}
+function todosCartoes(abrir){
+  fecharMenu();
+  document.querySelectorAll('.cartao[data-cartao]').forEach(c => { cartoesAbertos[c.dataset.cartao] = !!abrir; });
+  document.querySelectorAll('.sanfona').forEach(d => { d.open = !!abrir; });
+  gravarAbertos(); aplicarRecolher();
+  toast(abrir ? 'Tudo aberto' : 'Tudo recolhido');
+}
+
 function blindarAutofill(raiz){
   (raiz || document).querySelectorAll('input, textarea, select').forEach(el => {
     if(el.dataset.blindado) return;
@@ -2159,10 +2280,11 @@ function blindarAutofill(raiz){
 function tudo(){
   renderKPIs(); renderImovel(); renderEntradas(); renderFin(); renderCustos();
   renderAmortiz(); renderFechamento(); renderPlanta(); renderChips(); renderItens(); renderResumo();
-  blindarAutofill();
+  blindarAutofill(); aplicarRecolher();
 }
 (async function(){
   try{ const t = localStorage.getItem(CHAVE+'-tema'); if(t){ document.documentElement.setAttribute('data-tema', t); $('#btnTema').textContent = t==='claro'?'Tema escuro':'Tema claro'; } }catch(e){}
+  carregarAbertos();
   await carregar();
   tudo();
   const rv = document.getElementById('rodapeVersao');
