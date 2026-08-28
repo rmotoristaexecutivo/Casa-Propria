@@ -406,6 +406,25 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
 .cartao.recolhido > .cab > *:not(h2):not(.seta-cartao){display:none}
 .cartao.recolhido > .cab{border-bottom:0}
 
+
+/* ---------- compras dentro do modal do cômodo ---------- */
+.compras{display:flex; flex-direction:column; gap:8px}
+.li-compra{
+  display:grid; grid-template-columns:1fr 150px 120px 84px auto; gap:10px; align-items:center;
+  border:1px solid var(--linha); border-radius:11px; padding:9px 12px; background:var(--carta);
+}
+.li-compra.quitada{border-color:var(--ok); background:var(--ok-f)}
+.lc-nome span{display:block; font-size:11.5px; color:var(--tinta3); margin-top:1px}
+.lc-pgto{font-size:12.5px; color:var(--tinta2)}
+.lc-val{text-align:right; font-weight:700; font-size:14px}
+.lc-val small{display:block; color:var(--ok); font-size:11px; font-weight:600}
+.lc-check{font-size:12.5px}
+@media (max-width:640px){
+  .li-compra{grid-template-columns:1fr auto; row-gap:6px}
+  .lc-nome{grid-column:1/3}
+  .lc-val{text-align:left}
+}
+
 @media (max-width:880px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
 @media (max-width:880px){
@@ -619,7 +638,7 @@ html[data-tema="escuro"] .lb-trilho{background:#0E1524}
    Estado
    ========================================================= */
 const CHAVE = 'casa-propria-v1';
-const VERSAO = '2026-08-27-h';
+const VERSAO = '2026-08-28-i';
 
 const COMODOS_PADRAO = ['Sala','Cozinha','Lavanderia','Quarto 1','Quarto 2','Banheiro','Terraço','Geral / toda a casa'];
 
@@ -1704,10 +1723,101 @@ function abrirComodo(id){
     '<div class="campo"><label>Largura (m)</label><input class="mo" id="oLarg" value="'+(n(c.larg)?numFmt(c.larg):'')+'"></div>' +
     '<div class="campo"><label>Comprimento (m)</label><input class="mo" id="oComp" value="'+(n(c.comp)?numFmt(c.comp):'')+'"></div>' +
     '<div class="campo l2"><label>Orçamento planejado para o cômodo</label><input class="mo" id="oOrc" value="'+(n(c.orcado)?numFmt(c.orcado):'')+'" placeholder="0,00"></div>' +
-    '<div class="campo l2"><label>Gasto lançado até agora</label><input class="mo" value="'+moeda(gasto)+'" readonly></div>' +
+    '<div class="campo l2"><label>Gasto lançado até agora</label><input class="mo" id="oGasto" value="'+moeda(gasto)+'" readonly></div>' +
     '<div class="campo l4"><label>Observações do ambiente</label><textarea id="oObs" placeholder="Restrições, pontos de tomada, medidas de nicho...">'+esc(c.obs||'')+'</textarea></div>' +
-    '</div>' + (id ? '<div class="aviso">Excluir o cômodo mantém os itens lançados, mas eles ficam sem ambiente. Reatribua antes, se for o caso.</div>' : ''),
+    '</div>' +
+    (id ? blocoCompras(id) : '<div class="aviso ok">Salve o cômodo para começar a lançar as compras dele aqui dentro.</div>') +
+    (id ? '<div class="aviso">Excluir o cômodo mantém os itens lançados, mas eles ficam sem ambiente. Reatribua antes, se for o caso.</div>' : ''),
     !!id);
+  if(id) renderListaComodo(id);
+}
+
+/* Lista de compras do ambiente, dentro do próprio modal do cômodo: cada linha
+   com loja, produto, valor, parcelamento e baixa de pagamento. O que muda aqui
+   é gravado na hora, sem depender do botão Salvar do cômodo. */
+function blocoCompras(comodoId){
+  return '<div style="margin-top:18px; border-top:1px solid var(--linha); padding-top:16px">' +
+    '<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px">' +
+      '<strong class="disp" style="font-size:15px">Compras deste ambiente</strong>' +
+      '<span class="dica" id="comodoTotal"></span></div>' +
+    '<div id="listaComodo"></div>' +
+    '<div class="grade" style="margin-top:14px; background:var(--carta2); padding:13px; border-radius:12px">' +
+      '<div class="campo l2"><label>Produto ou serviço</label>' +
+        '<input id="ciProd" placeholder="Ex.: cooktop 5 bocas" onkeydown="if(event.key===\'Enter\')addItemComodo(\''+comodoId+'\')"></div>' +
+      '<div class="campo"><label>Loja / fornecedor</label><input id="ciLoja" placeholder="Ex.: Fast Shop"></div>' +
+      '<div class="campo"><label>Categoria</label><select id="ciCat">'+opcoes(CATEGORIAS,'Móveis prontos')+'</select></div>' +
+      '<div class="campo"><label>Valor total</label><input class="mo" id="ciValor" placeholder="0,00" oninput="previaParcela()"></div>' +
+      '<div class="campo"><label>Forma de pagamento</label><select id="ciForma" onchange="ajustaParcelas()">'+opcoes(FORMAS,'')+'</select></div>' +
+      '<div class="campo"><label>Vezes</label><input class="mo" id="ciParc" value="1" oninput="previaParcela()"></div>' +
+      '<div class="campo"><label>&nbsp;</label><label class="checa"><input type="checkbox" id="ciPago"> Já pago</label></div>' +
+      '<div class="campo l3"><span class="dica" id="ciPrevia">1 = à vista. No cartão parcelado, informe em quantas vezes.</span></div>' +
+      '<div class="campo"><label>&nbsp;</label><button class="btn primario" onclick="addItemComodo(\''+comodoId+'\')">Adicionar compra</button></div>' +
+    '</div></div>';
+}
+function ajustaParcelas(){ previaParcela(); }
+function previaParcela(){
+  const el = document.getElementById('ciPrevia'); if(!el) return;
+  const v = n(vm('ciValor')), q = Math.max(1, Math.round(n(vm('ciParc'))) || 1);
+  el.textContent = (v && q > 1)
+    ? q + 'x de ' + moeda(v/q) + ' — total ' + moeda(v)
+    : '1 = à vista. No cartão parcelado, informe em quantas vezes.';
+}
+function renderListaComodo(comodoId){
+  const alvo = document.getElementById('listaComodo'); if(!alvo) return;
+  const lista = itensDoComodo(comodoId);
+  const g = document.getElementById('oGasto');
+  if(g) g.value = moeda(gastoComodo(comodoId));
+  const tot = document.getElementById('comodoTotal');
+  if(tot) tot.textContent = lista.length
+    ? moeda(gastoComodo(comodoId)) + ' em ' + lista.length + ' item(ns)' : '';
+  if(!lista.length){
+    alvo.innerHTML = '<p class="vazio" style="padding:14px">Nenhuma compra lançada neste ambiente ainda.</p>';
+    return;
+  }
+  alvo.innerHTML = '<div class="compras">' + lista.map(i => {
+    const t = totalItem(i), q = Math.max(1, Math.round(n(i.parcelas)) || 1);
+    const pgto = q > 1 ? q + 'x de ' + moeda(t/q) : (i.forma || 'à vista');
+    return '<div class="li-compra'+(i.pago?' quitada':'')+'">' +
+      '<div class="lc-nome"><strong>'+esc(i.desc)+'</strong>' +
+        '<span>'+(i.empresa ? esc(i.empresa)+' · ' : '')+esc(i.categoria||'')+'</span></div>' +
+      '<div class="lc-pgto">'+esc(q>1 ? (i.forma?esc(i.forma)+' · ':'')+pgto : pgto)+'</div>' +
+      '<div class="lc-val dinheiro">'+moeda(t)+
+        (i.pago && n(i.desconto) ? '<small>pagou '+moeda(t-n(i.desconto))+'</small>' : '')+'</div>' +
+      '<label class="checa lc-check"><input type="checkbox"'+(i.pago?' checked':'')+
+        ' onchange="pagoNoComodo(\''+i.id+'\',\''+comodoId+'\',this.checked)"> pago</label>' +
+      '<button class="btn pequeno" onclick="abrirItem(\''+i.id+'\')">Abrir</button>' +
+    '</div>';
+  }).join('') + '</div>';
+}
+function pagoNoComodo(itemId, comodoId, pago){
+  const it = D.itens.find(x=>x.id===itemId); if(!it) return;
+  marcarPago(it, pago);
+  if(!pago) it.desconto = 0;
+  salvar(); renderListaComodo(comodoId);
+  renderItens(); renderPlanta(); renderKPIs(); renderResumo();
+  toast(pago ? 'Pago em ' + dataBR(it.dataPago) : 'Pagamento desmarcado');
+}
+function addItemComodo(comodoId){
+  const desc = vm('ciProd').trim();
+  if(!desc){ toast('Diga o que foi comprado'); document.getElementById('ciProd').focus(); return; }
+  const pago = cm('ciPago');
+  const novo = {
+    id:uid(), comodoId:comodoId, categoria:vm('ciCat')||'Outros', profissao:'', desc:desc,
+    empresa:vm('ciLoja').trim(), contato:'', medida:0, unidade:'un', qtd:1,
+    valorUnit:n(vm('ciValor')), forma:vm('ciForma'),
+    parcelas:Math.max(1, Math.round(n(vm('ciParc'))) || 1),
+    status:pago ? 'Comprado' : 'Orçado', pago:pago,
+    dataPago:pago ? hojeISO() : '', desconto:0, data:pago ? hojeISO() : '', obs:''
+  };
+  D.itens.push(novo);
+  ['ciProd','ciLoja','ciValor'].forEach(k => { const el = document.getElementById(k); if(el) el.value=''; });
+  const p = document.getElementById('ciParc'); if(p) p.value = '1';
+  const c = document.getElementById('ciPago'); if(c) c.checked = false;
+  previaParcela();
+  salvar(); renderListaComodo(comodoId);
+  renderItens(); renderPlanta(); renderKPIs(); renderResumo();
+  document.getElementById('ciProd').focus();
+  toast('Compra lançada em ' + comodoNome(comodoId));
 }
 /* ---- item ---- */
 function abrirItem(id){
