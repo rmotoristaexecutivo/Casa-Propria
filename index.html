@@ -444,6 +444,10 @@ tr.cr-abatida td.cel-check, tr.cr-abatida td:nth-child(5){text-decoration:none}
 input.cr-data{padding:5px 8px; font-size:13px; border-radius:8px; width:auto; min-width:136px}
 input.cr-data:disabled{opacity:.4}
 
+
+.stats.s5{grid-template-columns:repeat(5,1fr)}
+@media (max-width:880px){ .stats.s5{grid-template-columns:repeat(2,1fr)} }
+
 @media (max-width:880px){ .stats{grid-template-columns:repeat(2,1fr)} }
 
 @media (max-width:880px){
@@ -669,7 +673,7 @@ input.cr-data:disabled{opacity:.4}
    Estado
    ========================================================= */
 const CHAVE = 'casa-propria-v1';
-const VERSAO = '2026-11-09-j';
+const VERSAO = '2026-11-13-m';
 
 const COMODOS_PADRAO = ['Sala','Cozinha','Lavanderia','Quarto 1','Quarto 2','Banheiro','Terraço','Geral / toda a casa'];
 
@@ -961,13 +965,37 @@ function cronoParcelasVencidasAte(dataISO){
 /* Saldo teórico logo após a parcela k, descontando as amortizações antecipadas.
    Como a prestação continua a mesma, cada amortização rende juros compostos
    até lá — por isso o X é multiplicado por (1+i)^(meses decorridos). */
+/* Diferença entre o saldo devedor do banco e o da planilha teórica. Na simulação da Caixa de
+   13/11/2026 o saldo de partida era R$ 134,00 maior (300.701,55 contra 300.567,55). */
+function ajusteSaldo(){
+  const f = document.getElementById('aAjuste');
+  if(f) return n(f.value);
+  const m = D.cronMeta || {};
+  if(m.ajusteSaldo !== undefined && m.ajusteSaldo !== '') return n(m.ajusteSaldo);
+  return Math.abs(n(m.saldoInicial) - 300567.55) < 0.01 ? 134 : 0;
+}
+/* Juros que a Caixa desconta do valor pago: dias corridos desde o último vencimento (contando o dia
+   do pagamento) à taxa mensal / 30, truncado em centavos. Calibrado na simulação de 13/11/2026:
+   8 dias sobre R$ 20.000 = R$ 48,55. */
+function jurosDiariosEst(valor, dataISO){
+  const R = D.cronograma, i = cronoTaxaMensal();
+  if(!R.length || !i || !n(valor) || !dataISO) return 0;
+  const k = Math.min(cronoParcelasVencidasAte(dataISO), R.length);
+  let base;
+  if(k > 0) base = R[k-1].venc;
+  else { const d = new Date(R[0].venc + 'T12:00:00'); d.setMonth(d.getMonth() - 1); base = d.toISOString().slice(0,10); }
+  const dias = Math.round((new Date(dataISO + 'T12:00:00') - new Date(base + 'T12:00:00')) / 86400000) + 1;
+  if(dias <= 0) return 0;
+  return Math.floor(n(valor) * i * Math.min(dias, 31) / 30 * 100) / 100;
+}
 function cronoSaldoModelo(k, lista){
   const R = D.cronograma, i = cronoTaxaMensal();
   let s = k <= 0 ? cronoSaldoInicial() : n(R[Math.min(k, R.length) - 1].saldo);
+  if(s > 0.005) s += ajusteSaldo();
   (lista || []).forEach(a => {
     if(!n(a.valor)) return;
     const kj = Math.min(R.length, cronoParcelasVencidasAte(a.data));
-    s -= n(a.valor) * Math.pow(1 + i, Math.max(0, k - kj));
+    s -= (n(a.efetivo) || n(a.valor)) * Math.pow(1 + i, Math.max(0, k - kj));
   });
   return Math.max(0, s);
 }
@@ -987,14 +1015,15 @@ function somaEncUltimas(N, ignoreId){
 }
 /* Quantas parcelas do fim do contrato uma amortização elimina (prazo reduzido,
    prestação mantida): resolve S' = P·(1 − (1+i)^−m)/i para o novo prazo m. */
-function estimarAmortizacao(valor, dataISO, ignoreId){
+function estimarAmortizacao(valor, dataISO, ignoreId, saldoBanco){
   const R = D.cronograma; if(!R.length || !n(valor)) return null;
   const i = cronoTaxaMensal(), P = n(R[0].prest);
   if(!i || !P) return null;
   const anteriores = (D.amortiz||[]).filter(a => a.id !== ignoreId && a.data && a.data <= dataISO);
   const totalAntes = cronoTotalAtivo(ignoreId);
   const k = Math.min(cronoParcelasVencidasAte(dataISO), totalAntes);
-  const sDepois = cronoSaldoModelo(k, anteriores) - n(valor);
+  /* Se o banco informou o saldo devedor depois da amortização, ele vale mais que o modelo da planilha. */
+  const sDepois = n(saldoBanco) > 0 ? n(saldoBanco) : cronoSaldoModelo(k, anteriores) - n(valor);
   let novoTotal;
   if(sDepois <= 0.005) novoTotal = k;
   else {
@@ -1003,7 +1032,16 @@ function estimarAmortizacao(valor, dataISO, ignoreId){
   }
   novoTotal = Math.min(totalAntes, Math.max(k, novoTotal));
   const N = totalAntes - novoTotal;
-  return {parcelas:N, montante:somaEncUltimas(N, ignoreId), saldoDepois:Math.max(0, Math.round(sDepois * 100) / 100)};
+  /* A última prestação sai menor: é o resíduo que sobra depois de r-1 pagamentos cheios. */
+  let ultima = 0;
+  const r = novoTotal - k;
+  if(sDepois > 0.005 && r > 0){
+    let s = sDepois;
+    for(let j = 1; j < r; j++) s = s * (1 + i) - P;
+    ultima = Math.max(0, Math.round(s * (1 + i) * 100) / 100);
+  }
+  return {parcelas:N, montante:somaEncUltimas(N, ignoreId), saldoDepois:Math.max(0, Math.round(sDepois * 100) / 100),
+          ultima:ultima, totalDepois:novoTotal};
 }
 
 function somaCustos(){ return D.custos.reduce((s,c)=>s+n(c.valor),0); }
@@ -1091,7 +1129,7 @@ function campoFin(el){
 /* =========================================================
    Planilha de parcelas — desenho
    ========================================================= */
-let cronoFiltro = 'todas', cronoAnosAbertos = {};
+let cronoFiltro = 'ativas', cronoAnosAbertos = {};
 
 function renderCronograma(){
   const topo = document.getElementById('cronoTopo'), lista = document.getElementById('cronoLista');
@@ -1109,15 +1147,19 @@ function renderCronograma(){
   const prox = R.slice(0, ativas).find(r => !r.pago);
   const abatidasN = R.length - ativas;
   const st = (r,v,m,cor) => '<div class="stat"><div class="r">'+r+'</div><div class="v"'+(cor?' style="color:'+cor+'"':'')+'>'+v+'</div><div class="m">'+m+'</div></div>';
-  let html = '<div class="stats" style="margin-bottom:12px">' +
+  if(!abatidasN && (cronoFiltro === 'abatidas' || cronoFiltro === 'todas')) cronoFiltro = 'ativas';
+  const ultimaAtiva = ativas ? R[ativas - 1] : null;
+  let html = '<div class="stats s5" style="margin-bottom:12px">' +
     st('Parcelas pagas', cronoPagas().length + ' de ' + ativas, moeda(cronoPagoTotal()) + ' pagos', 'var(--ok)') +
     st('Próxima parcela', prox ? moeda(prox.enc) : '—', prox ? 'nº ' + prox.n + ' · ' + dataBR(prox.venc) : 'todas pagas', 'var(--c1)') +
     st('Saldo devedor', moeda(cronoSaldoAtual()), 'estimado pela planilha, sem a correção da TR', 'var(--c3)') +
     st('Montante a pagar', moeda(cronoMontanteAberto()),
       abatidasN ? abatidasN + ' parcelas abatidas · ' + moeda(cronoAbatidoValor()) : 'soma das parcelas em aberto', 'var(--c5)') +
+    st('Última parcela', ultimaAtiva ? dataBR(ultimaAtiva.venc) : 'quitado',
+      ativas ? 'restam ' + (ativas - cronoPagas().length) + ' parcelas' + (abatidasN ? ' · prazo reduzido em ' + tempoTxt(abatidasN) : '') : 'sem parcelas restantes', 'var(--c6)') +
     '</div>';
-  const filtros = [['todas','Todas'],['apagar','A pagar'],['pagas','Pagas']];
-  if(abatidasN) filtros.push(['abatidas','Abatidas']);
+  const filtros = [['ativas','Ativas'],['apagar','A pagar'],['pagas','Pagas']];
+  if(abatidasN){ filtros.push(['abatidas','Abatidas']); filtros.push(['todas','Todas']); }
   html += '<div class="chips" style="margin:0">' + filtros.map(f =>
     '<button class="chip" aria-pressed="'+(cronoFiltro===f[0])+'" onclick="setFiltroCrono(\''+f[0]+'\')">'+f[1]+'</button>').join('') + '</div>';
   topo.innerHTML = html;
@@ -1126,7 +1168,8 @@ function renderCronograma(){
   R.forEach((r, idx) => {
     const abat = idx >= ativas;
     let ok = true;
-    if(cronoFiltro === 'apagar') ok = !abat && !r.pago;
+    if(cronoFiltro === 'ativas') ok = !abat;
+    else if(cronoFiltro === 'apagar') ok = !abat && !r.pago;
     else if(cronoFiltro === 'pagas') ok = !abat && !!r.pago;
     else if(cronoFiltro === 'abatidas') ok = abat;
     if(!ok) return;
@@ -1161,8 +1204,8 @@ function renderCronograma(){
     const aberto = (ano in cronoAnosAbertos) ? cronoAnosAbertos[ano] : ano === padrao;
     return '<details class="ano-crono"'+(aberto?' open':'')+' ontoggle="cronoToggle(\''+ano+'\',this.open)">' +
       '<summary><span>'+ano+'</span><span class="ct">'+L.length+' parcela'+(L.length>1?'s':'')+
-        (nAbat ? ' · '+nAbat+' abatida'+(nAbat>1?'s':'') : '')+(nAbat < L.length ? ' · '+nPag+' paga'+(nPag===1?'':'s') : '')+'</span>' +
-      '<span class="ct" style="margin-left:auto">'+(nAbat === L.length ? 'abatidas' : moeda(tot))+'</span></summary>' +
+        (nAbat === L.length ? ' abatida'+(nAbat>1?'s':'') : (nAbat ? ' · '+nAbat+' abatida'+(nAbat>1?'s':'') : '')+' · '+nPag+' paga'+(nPag===1?'':'s'))+'</span>' +
+      '<span class="ct" style="margin-left:auto">'+(nAbat === L.length ? '—' : moeda(tot))+'</span></summary>' +
       '<div class="tab-rolo crono"><table><thead><tr><th class="cel-check">Pago</th><th class="num">Nº</th><th>Vencimento</th><th class="num">Encargo</th>' +
       '<th>Pago em</th><th class="num">Prestação</th><th class="num">Seguros</th><th class="num">Tx adm</th><th class="num">Saldo dev.</th></tr></thead>' +
       '<tbody>'+L.map(x => linha(x.r, x.abat)).join('')+'</tbody></table></div></details>';
@@ -1492,92 +1535,162 @@ function custosPadrao(){
 
 const TIPOS_AMORTIZ = ['Amortização — reduz o prazo','Amortização — reduz a parcela','Parcela extra','Quitação total','Portabilidade'];
 
+/* 108 parcelas = 9 anos; 87 = 7 anos e 3 meses (1 parcela = 1 mês). */
+function tempoTxt(N){
+  N = Math.max(0, Math.round(n(N)));
+  if(!N) return '—';
+  const a = Math.floor(N / 12), m = N % 12, partes = [];
+  if(a) partes.push(a + (a === 1 ? ' ano' : ' anos'));
+  if(m) partes.push(m + (m === 1 ? ' mês' : ' meses'));
+  return partes.join(' e ');
+}
+
 function renderAmortiz(){
   const t = $('#tbAmortiz');
   const lista = (D.amortiz||[]).slice().sort((a,b)=>String(a.data||'').localeCompare(String(b.data||'')));
   if(!lista.length){
-    t.innerHTML = '<tr><td class="vazio">Pagou parcelas adiantadas ou amortizou o saldo? Lance aqui o valor amortizado, quantas parcelas saíram do fim do contrato e quanto elas somavam. A diferença entre o que foi abatido e o que você pagou é a sua economia de juros.</td></tr>';
+    t.innerHTML = '<tr><td class="vazio">Pagou parcelas adiantadas ou amortizou o saldo? Lance aqui o valor: o app calcula sozinho quantas parcelas saem do fim do contrato, quanto tempo isso reduz e quanto elas somavam. A diferença entre o que foi abatido e o que você pagou é a sua economia de juros.</td></tr>';
     return;
   }
+  const sub = txt => '<small style="display:block;color:var(--tinta3);font-size:11px;font-weight:500">'+txt+'</small>';
   const linhas = lista.map(a => {
     const N = Math.round(n(a.parcelasAbatidas));
     return '<tr onclick="abrirAmortiz(\''+a.id+'\')" style="cursor:pointer">' +
       '<td>'+dataBR(a.data)+'</td>' +
       '<td><strong>'+esc(a.tipo||'Amortização')+'</strong>' +
-        (a.obs ? '<div style="font-size:12px;color:var(--tinta3)">'+esc(a.obs)+'</div>' : '')+'</td>' +
-      '<td class="num"><strong>'+moeda(a.valor)+'</strong></td>' +
-      '<td class="num">'+(N ? N : '—')+'</td>' +
+        (a.obs ? '<div style="font-size:12px;color:var(--tinta3)">'+esc(a.obs)+'</div>' : '') +
+        (n(a.prestNova) ? sub('nova prestação (banco) '+moeda(a.prestNova)) : '')+'</td>' +
+      '<td class="num"><strong>'+moeda(a.valor)+'</strong>' +
+        (n(a.juros) ? sub('efetiva '+moeda(n(a.efetivo)||n(a.valor)-n(a.juros))+' · juros '+moeda(a.juros)) : '') + '</td>' +
+      '<td class="num">'+(N ? N + sub(tempoTxt(N)) : '—')+'</td>' +
       '<td class="num">'+(n(a.abatido) ? moeda(a.abatido) : '—')+'</td>' +
       '<td class="num" style="color:var(--ok)">'+(n(a.desconto) ? moeda(a.desconto) : '—')+'</td>' +
       '<td class="num">'+(n(a.saldoDepois) ? moeda(a.saldoDepois) : '—')+'</td></tr>';
   }).join('');
   const totV = somaAmortiz(), totN = parcelasAbatidasTotal();
   const totM = lista.reduce((s,a)=>s+n(a.abatido),0), totD = lista.reduce((s,a)=>s+n(a.desconto),0);
+  const ativas = temCrono() ? cronoTotalAtivo() : 0;
   const extra = (temCrono() && totN)
-    ? '<tr><td colspan="7" style="font-weight:500;color:var(--tinta2)">Prazo atual: <strong>'+cronoTotalAtivo()+'</strong> de '+D.cronograma.length+
-      ' parcelas · montante das parcelas restantes: <strong>'+moeda(cronoMontanteTotal())+'</strong></td></tr>' : '';
+    ? '<tr><td colspan="7" style="font-weight:500;color:var(--tinta2)">Prazo atual: <strong>'+ativas+'</strong> de '+D.cronograma.length+
+      ' parcelas' + (ativas ? ', a última em <strong>'+dataBR(D.cronograma[ativas-1].venc)+'</strong>' : ' — financiamento quitado') +
+      ' · montante das parcelas restantes: <strong>'+moeda(cronoMontanteTotal())+'</strong></td></tr>' : '';
   t.innerHTML = '<thead><tr><th>Data</th><th>Tipo</th><th class="num">Valor amortizado</th><th class="num">Parcelas abatidas</th>' +
     '<th class="num">Abatido do montante</th><th class="num">Economia</th><th class="num">Saldo depois</th></tr></thead><tbody>'+linhas+'</tbody>' +
     '<tfoot><tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>'+moeda(totV)+'</strong></td>' +
-    '<td class="num"><strong>'+(totN||'—')+'</strong></td><td class="num"><strong>'+(totM?moeda(totM):'—')+'</strong></td>' +
+    '<td class="num"><strong>'+(totN ? totN + sub(tempoTxt(totN)) : '—')+'</strong></td><td class="num"><strong>'+(totM?moeda(totM):'—')+'</strong></td>' +
     '<td class="num" style="color:var(--ok)"><strong>'+moeda(totD)+'</strong></td><td></td></tr>'+extra+'</tfoot>';
 }
 
 function abrirAmortiz(id){
   const a = id ? (D.amortiz||[]).find(x=>x.id===id)
-    : {data:hojeISO(), tipo:'Amortização — reduz o prazo', valor:'', parcelasAbatidas:'', abatido:'', desconto:'', saldoDepois:'', obs:''};
+    : {data:hojeISO(), tipo:'Amortização — reduz o prazo', valor:'', juros:'', efetivo:'', prazoNovo:'', prestNova:'', parcelasAbatidas:'', abatido:'', desconto:'', saldoDepois:'', obs:''};
   if(!a) return;
   ctx = {tipo:'amortiz', id:id||null};
   const tem = temCrono();
-  /* valores já gravados são tratados como informados pelo banco: não são recalculados sozinhos */
-  const travaMont = (id && n(a.abatido)) ? ' data-manual="1"' : '';
-  const travaDesc = (id && n(a.desconto)) ? ' data-manual="1"' : '';
+  /* Ao editar, o que já está gravado vale como informado pelo banco: não é recalculado sozinho. */
+  const trava = campo => (id && n(a[campo])) ? ' data-manual="1"' : '';
   abrirModal(id ? 'Editar amortização antecipada' : 'Nova amortização antecipada',
     '<div class="grade">' +
-    '<div class="campo"><label>Data do pagamento</label><input type="date" id="aData" value="'+esc(a.data||'')+'"></div>' +
-    '<div class="campo l2"><label>Tipo</label><select id="aTipo">'+opcoes(TIPOS_AMORTIZ, a.tipo)+'</select></div>' +
-    '<div class="campo"><label>Valor da amortização</label><input class="mo" id="aValor" value="'+(n(a.valor)?numFmt(a.valor):'')+'" placeholder="0,00" oninput="autoEconomia()"></div>' +
+    '<div class="campo"><label>Data do pagamento</label><input type="date" id="aData" value="'+esc(a.data||'')+'" oninput="autoEstimar()"></div>' +
+    '<div class="campo l2"><label>Tipo</label><select id="aTipo" onchange="autoEstimar()">'+opcoes(TIPOS_AMORTIZ, a.tipo)+'</select></div>' +
+    '<div class="campo"><label>Valor da amortização</label><input class="mo" id="aValor" value="'+(n(a.valor)?numFmt(a.valor):'')+'" placeholder="0,00" oninput="autoEstimar()"></div>' +
     '<div class="campo l4" style="flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap">' +
-      (tem ? '<button class="btn" onclick="estimarAmortizacaoUI()">Estimar pela planilha</button>' +
-             '<span class="dica">Calcula quantas parcelas saem do fim do contrato e quanto somam. É uma estimativa teórica — o extrato da Caixa vale mais.</span>'
-           : '<span class="dica">Importe a planilha de parcelas para estimar automaticamente as parcelas abatidas e a economia.</span>') + '</div>' +
-    '<div class="campo"><label>Parcelas abatidas</label><input class="mo" id="aParc" value="'+(n(a.parcelasAbatidas)?Math.round(n(a.parcelasAbatidas)):'')+'" placeholder="0" oninput="autoMontanteAmort()"></div>' +
-    '<div class="campo l2"><label>Valor abatido do montante de parcelas</label><input class="mo" id="aMont"'+travaMont+' value="'+(n(a.abatido)?numFmt(a.abatido):'')+'" placeholder="0,00" oninput="this.dataset.manual=\'1\'; autoEconomia()"></div>' +
-    '<div class="campo"><label>Economia (juros abatidos)</label><input class="mo" id="aDesc"'+travaDesc+' value="'+(n(a.desconto)?numFmt(a.desconto):'')+'" placeholder="0,00" oninput="this.dataset.manual=\'1\'"></div>' +
-    '<div class="campo l2"><label>Saldo devedor depois</label><input class="mo" id="aSaldo" value="'+(n(a.saldoDepois)?numFmt(a.saldoDepois):'')+'" placeholder="0,00"></div>' +
+      (tem ? '<button class="btn" onclick="recalcularAmortiz()">Recalcular pela planilha</button>' +
+             '<span class="dica">Digite só o valor: juros diários, amortização efetiva, parcelas abatidas, prazo e saldo saem sozinhos, seguindo o cálculo da Caixa. Os campos “opcional” só servem se você quiser conferir com o extrato — o que você digitar não é sobrescrito.</span>'
+           : '<span class="dica">Importe a planilha de parcelas para o cálculo automático das parcelas abatidas e do prazo final.</span>') + '</div>' +
+    '<div class="campo"><label>Juros diários</label><input class="mo" id="aJuros"'+trava('juros')+' value="'+(n(a.juros)?numFmt(a.juros):'')+'" placeholder="automático" oninput="this.dataset.manual=\'1\'; autoEstimar()"></div>' +
+    '<div class="campo"><label>Amortização efetiva</label><input class="mo" id="aEfet"'+trava('efetivo')+' value="'+(n(a.efetivo)?numFmt(a.efetivo):'')+'" placeholder="valor − juros" oninput="this.dataset.manual=\'1\'; autoEstimar()"></div>' +
+    '<div class="campo"><label>Novo prazo (meses)</label><input class="mo" id="aPrazoNovo" value="'+(n(a.prazoNovo)?Math.round(n(a.prazoNovo)):'')+'" placeholder="opcional" oninput="autoEstimar()"></div>' +
+    '<div class="campo"><label>Nova prestação (banco)</label><input class="mo" id="aPrest" value="'+(n(a.prestNova)?numFmt(a.prestNova):'')+'" placeholder="opcional" oninput="atualizaPreviaAmort()"></div>' +
+    '<div class="campo"><label>Parcelas abatidas</label><input class="mo" id="aParc"'+trava('parcelasAbatidas')+' value="'+(n(a.parcelasAbatidas)?Math.round(n(a.parcelasAbatidas)):'')+'" placeholder="0" oninput="this.dataset.manual=\'1\'; recalcDerivados()"></div>' +
+    '<div class="campo l2"><label>Valor abatido do montante de parcelas</label><input class="mo" id="aMont"'+trava('abatido')+' value="'+(n(a.abatido)?numFmt(a.abatido):'')+'" placeholder="0,00" oninput="this.dataset.manual=\'1\'; recalcDerivados()"></div>' +
+    '<div class="campo"><label>Economia (juros abatidos)</label><input class="mo" id="aDesc"'+trava('desconto')+' value="'+(n(a.desconto)?numFmt(a.desconto):'')+'" placeholder="0,00" oninput="this.dataset.manual=\'1\'"></div>' +
+    '<div class="campo l2"><label>Tempo reduzido</label><input id="aTempo" readonly value="'+(n(a.parcelasAbatidas)?tempoTxt(a.parcelasAbatidas):'')+'" placeholder="calculado pelas parcelas abatidas"></div>' +
+    '<div class="campo l2"><label>Saldo devedor depois</label><input class="mo" id="aSaldo"'+trava('saldoDepois')+' value="'+(n(a.saldoDepois)?numFmt(a.saldoDepois):'')+'" placeholder="0,00" oninput="this.dataset.manual=\'1\'; autoEstimar()"></div>' +
+    (tem ? '<div class="campo l2"><label>Ajuste do saldo (banco − planilha)</label><input class="mo" id="aAjuste" value="'+numFmt(ajusteSaldo())+'" placeholder="0,00" oninput="autoEstimar()"></div>' +
+           '<div class="campo l2"><span class="dica" style="margin-top:22px;display:block">A Caixa parte de um saldo maior que o da planilha. Vale para o contrato todo; mude só se o extrato mostrar outra diferença.</span></div>' : '') +
+    '<div class="campo l4"><div id="aPrevia"></div></div>' +
     '<div class="campo l4"><label>Observações</label><textarea id="aObs" placeholder="Ex.: usei FGTS, o banco informou redução de 14 meses">'+esc(a.obs||'')+'</textarea></div>' +
     '</div>' +
     '<div class="aviso ok">O valor da amortização entra no “já desembolsado”. As parcelas abatidas saem do <strong>fim</strong> da planilha e deixam de contar no montante a pagar. A economia é a diferença entre o valor abatido e o que você pagou.</div>',
     !!id);
+  atualizaPreviaAmort();
 }
-/* A economia sugerida é (valor abatido − valor pago), enquanto você não digitar a sua. */
-function autoEconomia(){
-  const d = document.getElementById('aDesc'); if(!d || d.dataset.manual === '1') return;
-  const m = n(vm('aMont')), v = n(vm('aValor'));
-  d.value = (m && v && m > v) ? numFmt(m - v) : '';
+
+/* Preenche sozinho o que ainda não foi digitado à mão: parcelas abatidas, montante, economia e saldo. */
+function autoEstimar(forcar){
+  const el = k => document.getElementById(k);
+  if(!el('aParc')) return;
+  if(forcar){
+    ['aParc','aMont','aDesc','aSaldo','aEfet','aJuros'].forEach(k => { el(k).dataset.manual = ''; });
+    el('aPrazoNovo').value = '';
+  }
+  const tipo = vm('aTipo'), v = n(vm('aValor')), data = vm('aData') || hojeISO();
+  /* Amortização efetiva = valor pago menos os juros diários que a Caixa desconta. */
+  if(el('aJuros').dataset.manual !== '1'){
+    const j = (temCrono() && v && String(tipo).indexOf('Amortização') === 0) ? jurosDiariosEst(v, data) : 0;
+    el('aJuros').value = j ? numFmt(j) : '';
+  }
+  const juros = n(vm('aJuros'));
+  if(el('aEfet').dataset.manual !== '1') el('aEfet').value = (v && juros && juros < v) ? numFmt(v - juros) : '';
+  if(!temCrono()){ recalcDerivados(); return; }
+  const efet = n(vm('aEfet')) || v;
+  const reduzPrazo = tipo !== 'Amortização — reduz a parcela' && tipo !== 'Portabilidade';
+  const saldoBanco = el('aSaldo').dataset.manual === '1' ? n(vm('aSaldo')) : 0;
+  const e = efet ? estimarAmortizacao(efet, data, ctx && ctx.id, saldoBanco) : null;
+  let N = (e && reduzPrazo) ? e.parcelas : 0;
+  /* Novo prazo informado pelo banco: parcelas abatidas = prazo restante hoje − novo prazo. */
+  const pn = Math.round(n(vm('aPrazoNovo')));
+  if(pn > 0 && reduzPrazo){
+    const antes = cronoTotalAtivo(ctx && ctx.id);
+    const restante = antes - Math.min(cronoParcelasVencidasAte(data), antes);
+    N = Math.max(0, restante - pn);
+  }
+  if(el('aParc').dataset.manual !== '1') el('aParc').value = N || '';
+  if(el('aSaldo').dataset.manual !== '1') el('aSaldo').value = (e && e.saldoDepois) ? numFmt(e.saldoDepois) : '';
+  recalcDerivados();
 }
-function autoMontanteAmort(){
-  const el = document.getElementById('aMont');
-  if(!el || el.dataset.manual === '1' || !temCrono()) return;
+/* O que depende das parcelas abatidas: montante, economia, tempo e a prévia do prazo final. */
+function recalcDerivados(){
+  const el = k => document.getElementById(k);
+  if(!el('aParc')) return;
+  const N = Math.max(0, Math.round(n(vm('aParc')))), v = n(vm('aValor'));
+  if(el('aMont').dataset.manual !== '1') el('aMont').value = (N && temCrono()) ? numFmt(somaEncUltimas(N, ctx && ctx.id)) : '';
+  if(el('aDesc').dataset.manual !== '1'){
+    const m = n(vm('aMont'));
+    el('aDesc').value = (m && v && m > v) ? numFmt(m - v) : '';
+  }
+  atualizaPreviaAmort();
+}
+function atualizaPreviaAmort(){
+  const alvo = document.getElementById('aPrevia'), tm = document.getElementById('aTempo');
   const N = Math.max(0, Math.round(n(vm('aParc'))));
-  el.value = N ? numFmt(somaEncUltimas(N, ctx && ctx.id)) : '';
-  autoEconomia();
+  if(tm) tm.value = N ? tempoTxt(N) : '';
+  if(!alvo) return;
+  if(!temCrono()){ alvo.innerHTML = ''; return; }
+  const R = D.cronograma, antes = cronoTotalAtivo(ctx && ctx.id), depois = Math.max(0, antes - N);
+  const fim = q => q > 0 ? dataBR(R[q-1].venc) : '—';
+  let txt = '<strong>Antes:</strong> ' + antes + ' parcelas, a última em ' + fim(antes) +
+    '<br><strong>Depois:</strong> ' + depois + ' parcelas' + (depois ? ', a última em ' + fim(depois) : ' — financiamento quitado') +
+    (N ? '<br><strong>Redução:</strong> ' + N + ' parcelas (' + tempoTxt(N) + ')' : '');
+  const v = n(vm('aValor'));
+  if(N && v && depois){
+    const sb = (document.getElementById('aSaldo').dataset.manual === '1') ? n(vm('aSaldo')) : 0;
+    const e = estimarAmortizacao(n(vm('aEfet')) || v, vm('aData') || hojeISO(), ctx && ctx.id, sb);
+    if(e && e.parcelas === N && e.ultima)
+      txt += '<br><span class="dica">A última prestação sai menor, em torno de ' + moeda(e.ultima) + ' (o resíduo que sobra).</span>';
+  }
+  const pr = n(vm('aPrest'));
+  if(pr) txt += '<br><span class="dica">Nova prestação informada pelo banco: ' + moeda(pr) + ' (a planilha do app continua com as prestações originais).</span>';
+  alvo.innerHTML = '<div class="aviso ok" style="margin:0">' + txt + '</div>';
 }
-function estimarAmortizacaoUI(){
+function recalcularAmortiz(){
   if(!temCrono()){ toast('Importe a planilha de parcelas primeiro'); return; }
   const tipo = vm('aTipo');
-  if(tipo === 'Amortização — reduz a parcela' || tipo === 'Portabilidade'){
-    toast('Nesse tipo o banco recalcula as prestações — informe os valores do extrato'); return;
-  }
-  const v = n(vm('aValor')), data = vm('aData') || hojeISO();
-  if(!v){ toast('Informe o valor da amortização'); return; }
-  const e = estimarAmortizacao(v, data, ctx && ctx.id);
-  if(!e){ toast('Não foi possível estimar com esta planilha'); return; }
-  document.getElementById('aParc').value = e.parcelas || '';
-  const m = document.getElementById('aMont'); m.dataset.manual = ''; m.value = e.montante ? numFmt(e.montante) : '';
-  const d = document.getElementById('aDesc'); d.dataset.manual = ''; d.value = (e.montante > v) ? numFmt(e.montante - v) : '';
-  document.getElementById('aSaldo').value = e.saldoDepois ? numFmt(e.saldoDepois) : '';
-  toast(e.parcelas ? 'Estimativa: ' + e.parcelas + ' parcelas abatidas' : 'Não chega a abater uma parcela inteira');
+  if(!n(vm('aValor'))){ toast('Informe o valor da amortização'); return; }
+  autoEstimar(true);
+  toast(tipo === 'Amortização — reduz a parcela' || tipo === 'Portabilidade'
+    ? 'Nesse tipo o prazo não muda — o banco recalcula as prestações' : 'Recalculado pela planilha');
 }
 
 /* =========================================================
@@ -2310,9 +2423,11 @@ function salvarModal(){
   if(ctx.tipo === 'amortiz'){
     const N = Math.max(0, Math.round(n(vm('aParc'))));
     const obj = {data:vm('aData'), tipo:vm('aTipo')||'Amortização', valor:n(vm('aValor')),
+      juros:n(vm('aJuros')), efetivo:n(vm('aEfet')), prazoNovo:Math.round(n(vm('aPrazoNovo'))), prestNova:n(vm('aPrest')),
       parcelasAbatidas:N, abatido:n(vm('aMont')), desconto:n(vm('aDesc')), saldoDepois:n(vm('aSaldo')), obs:vm('aObs')};
     if(!obj.valor){ toast('Informe o valor da amortização'); return; }
     if(temCrono() && N > cronoTotalAtivo(ctx.id)){ toast('Só restam ' + cronoTotalAtivo(ctx.id) + ' parcelas na planilha'); return; }
+    if(document.getElementById('aAjuste')){ if(!D.cronMeta) D.cronMeta = {}; D.cronMeta.ajusteSaldo = n(vm('aAjuste')); }
     if(!Array.isArray(D.amortiz)) D.amortiz = [];
     if(ctx.id) Object.assign(D.amortiz.find(x=>x.id===ctx.id), obj);
     else D.amortiz.push(Object.assign({id:uid()}, obj));
